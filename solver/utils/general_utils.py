@@ -1,3 +1,4 @@
+import numpy
 import tensorflow as tf  # tf 2.x
 import math
 import scipy
@@ -158,6 +159,7 @@ def fidel_calc_1q(channel1: tf.Tensor, channel2: tf.Tensor) -> tf.Tensor:
     choi2 = choi_swap_1qchannel(channel2) / tf.constant(2, COMPLEX)
 
     sqrt_matrix = scipy.linalg.sqrtm(sqrt_choi1 @ choi2 @ sqrt_choi1)
+    sqrt_matrix = sqrt_matrix.astype(numpy.complex128)
     trace = tf.linalg.trace(sqrt_matrix)
     return trace ** 2
 
@@ -172,6 +174,7 @@ def fidel_calc_2q(channel1: tf.Tensor, channel2: tf.Tensor) -> tf.Tensor:
     choi2 = choi_swap_2qchannel(channel2) / tf.constant(4, COMPLEX)
 
     sqrt_matrix = scipy.linalg.sqrtm(sqrt_choi1 @ choi2 @ sqrt_choi1)
+    sqrt_matrix = sqrt_matrix.astype(numpy.complex128)
     trace = tf.linalg.trace(sqrt_matrix)
     return trace ** 2
 
