@@ -1,4 +1,5 @@
 import QGOpt as qgo
+import pytest
 import tensorflow as tf
 
 import solver.utils.general_utils as util
@@ -52,14 +53,15 @@ def test_2q_channel_conversion():
         assert same_matrix(ncon_channel, util.convert_2q_from16x16(util.convert_2q_to16x16(ncon_channel)))
 
 
-def test_qgo_conversion():
+@pytest.mark.parametrize("d", [2])
+def test_qgo_conversion(d: int):
     for _ in range(5):
-        ch1 = create_random_channel(1)
+        ch1 = create_random_channel(1, d)
         pars1 = c_util.convert_channel_to_params(ch1)
         ch1_twin = c_util.convert_params_to_channel(pars1)
         assert same_matrix(ch1, ch1_twin)
 
-        ch2 = util.convert_2q_from16x16(create_random_channel(2))
+        ch2 = util.convert_2q_from16x16(create_random_channel(2, d))
         pars2 = c_util.convert_channel_to_params(ch2)
         ch2_twin = c_util.convert_params_to_channel(pars2)
         assert same_matrix(ch2, ch2_twin)

@@ -82,18 +82,18 @@ def is_dm(matrix: tf.Tensor, eps: float = 1e-5) -> bool:
     return _pass_choi_sanity(matrix, eps) == 0
 
 
-def create_random_channel(qubits: int) -> tf.Tensor:
+
+def create_random_channel(qudits: int, d: int) -> tf.Tensor:
     """
-    ONLY FOR TESTING PURPOSES
+    Creates a random quantum channel for a system of 'qudits' qudits, each of dimension 'd'. For tests.
     """
-    dim = 2 ** qubits
+    dim = d ** qudits
     dim_squared = dim ** 2
     kraus_rank = np.random.randint(1, dim_squared)
     kraus_ops: list[np.array] = []
 
-    for i in range(kraus_rank):
-        rnd_matrix = np.random.rand(dim, dim) * 1j / dim_squared
-        rnd_matrix += np.random.rand(dim, dim) / dim_squared
+    for _ in range(kraus_rank):
+        rnd_matrix = (np.random.rand(dim, dim) + 1j * np.random.rand(dim, dim)) / dim_squared
         kraus_ops.append(rnd_matrix)
 
     sum_parts = np.eye(dim, dtype=np.complex128)
@@ -111,3 +111,4 @@ def create_random_channel(qubits: int) -> tf.Tensor:
         ans += np.reshape(np.einsum('ij,kl->ikjl', op, op.conj()), (dim_squared, dim_squared))
 
     return tf.convert_to_tensor(ans, dtype=COMPLEX)
+
