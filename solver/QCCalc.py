@@ -145,21 +145,29 @@ class QCEvaluator:
         psi = ncon(tensors, net_struc, con_order, out_new_order)
         psi = tf.abs(psi)
 
+        # Отладочный вывод для размерности psi
+        # print("Debug: psi shape:", psi.shape)
+
+        # if psi.shape[0] == 0:
+        #     raise ValueError("psi is empty, which indicates an issue with tensor network contraction.")
+
+       
         if prev_samples is not None:
-            big_p = tf.concat([psi[:, 0][tf.newaxis], psi[:, 3][tf.newaxis]], axis=0)
+            big_p = tf.concat([psi[:, 0][tf.newaxis], psi[:, self.dim**2 - 1][tf.newaxis]], axis=0)
             big_p = tf.transpose(big_p)
             big_p = big_p / tf.reduce_sum(big_p, axis=1, keepdims=True)
             log_probs = tf.math.log(big_p)  # Gumbel trick (Ilya is a genius)
             eps = -tf.math.log(-tf.math.log(tf.random.uniform(log_probs.shape, dtype=FLOAT)))
             samples = (tf.argmax(log_probs + eps, axis=-1, output_type=tf.int32))
         else:
-            big_p = tf.concat([psi[0][tf.newaxis], psi[3][tf.newaxis]], axis=0)
+            big_p = tf.concat([psi[0][tf.newaxis], psi[self.dim**2 - 1][tf.newaxis]], axis=0)
             big_p = big_p / tf.reduce_sum(big_p, keepdims=True)
             log_probs = tf.math.log(big_p)
             eps = -tf.math.log(-tf.math.log(tf.random.uniform((bs, 2), dtype=FLOAT)))
             samples = (tf.argmax(log_probs + eps, axis=-1, output_type=tf.int32))
 
         return samples
+
 
     def make_full_samples(self, name: str, bs_override: int = 1000):
         """
