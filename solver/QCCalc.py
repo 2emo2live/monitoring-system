@@ -11,7 +11,7 @@ tn.set_default_backend("tensorflow")
 # TODO: rename samples to outcomes to be consistent with the article
 
 class QCEvaluator:
-    def __init__(self, gates: list[tf.Tensor], n: int):
+    def __init__(self, gates: list[tf.Tensor],  n: int, dim: int = 2):
         """
         A class which evaluates quantum circuits. Can generate a circuit's outcomes or evaluate outcome probability.
 
@@ -32,7 +32,8 @@ class QCEvaluator:
         self.gates = gates
         self.circuits: dict[str, NconTemplate] = {}
         self.n = n
-        self.in_states = n * [tf.constant([1, 0, 0, 0], dtype=COMPLEX)]
+        self.dim = dim
+        self.in_states = n * [tf.constant([1] + (self.dim ** 2 - 1) * [0], dtype=COMPLEX)]
 
     def add_circuit(self, tn_template: NconTemplate, name: str) -> None:
         """

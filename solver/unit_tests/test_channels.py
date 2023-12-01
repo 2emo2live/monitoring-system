@@ -53,15 +53,14 @@ def test_2q_channel_conversion():
         assert same_matrix(ncon_channel, util.convert_2q_from16x16(util.convert_2q_to16x16(ncon_channel)))
 
 
-@pytest.mark.parametrize("d", [2])
-def test_qgo_conversion(d: int):
+def test_qgo_conversion():
     for _ in range(5):
-        ch1 = create_random_channel(1, d)
+        ch1 = create_random_channel(1)
         pars1 = c_util.convert_channel_to_params(ch1)
         ch1_twin = c_util.convert_params_to_channel(pars1)
         assert same_matrix(ch1, ch1_twin)
 
-        ch2 = util.convert_2q_from16x16(create_random_channel(2, d))
+        ch2 = util.convert_2q_from16x16(create_random_channel(2))
         pars2 = c_util.convert_channel_to_params(ch2)
         ch2_twin = c_util.convert_params_to_channel(pars2)
         assert same_matrix(ch2, ch2_twin)

@@ -7,14 +7,15 @@ from solver.QCCalc import QCEvaluator
 from solver.utils.testing import is_choi, create_random_channel
 from solver.utils.misc import NconTemplate, COMPLEX
 
-@pytest.mark.parametrize("d", [2])
-def test_random_channel_sanity(d : int):
+d = 2
+
+def test_random_channel_sanity():
     """
     A test for a test. Ironic!
     """
     for _ in range(10):
-        ch1 = create_random_channel(1, d)
-        ch2 = create_random_channel(2, d)
+        ch1 = create_random_channel(1)
+        ch2 = create_random_channel(2)
         ch2_ncon = util.convert_2q_from16x16(ch2)
 
         choi1 = util.choi_swap_1qchannel(ch1) / tf.constant(2, dtype=COMPLEX)
@@ -28,10 +29,9 @@ def get_all_bistrings(qubit_num: int) -> tf.Tensor:
     return tf.transpose(tf.unravel_index(indices=tf.range(0, 2 ** qubit_num, delta=1), dims=[2] * qubit_num))
 
 
-@pytest.mark.parametrize("d", [2])
-def test_schema_1(d: int):
+def test_schema_1():
     in_state = tf.constant([1, 0, 0, 0], dtype=COMPLEX)
-    ch1 = create_random_channel(1, d)
+    ch1 = create_random_channel(1)
     out_state = tf.linalg.matvec(a=ch1, b=in_state)
 
     evaluator = QCEvaluator(gates=ch1[tf.newaxis], n=1)
@@ -100,16 +100,16 @@ NAMES_2Q = [
     '2Q->1Q1Q->2Q'
 ]
 
-@pytest.mark.parametrize("d", [2])
+
 @pytest.mark.parametrize(['lines_pattern', 'template'], zip(PATTERNS_2Q, TEMPLATES_2Q), ids=NAMES_2Q)
-def test_schema_2(lines_pattern: list[int], template: NconTemplate, d: int):
+def test_schema_2(lines_pattern: list[int], template: NconTemplate):
     in_state = tf.constant([1] + 15 * [0], dtype=COMPLEX)
-    gates = [create_random_channel(2, d),
-             create_random_channel(2, d),
-             create_random_channel(1, d),
-             create_random_channel(1, d),
-             create_random_channel(1, d),
-             create_random_channel(1, d)]
+    gates = [create_random_channel(2),
+             create_random_channel(2),
+             create_random_channel(1),
+             create_random_channel(1),
+             create_random_channel(1),
+             create_random_channel(1)]
 
     gates_ncon = gates.copy()
     for i in [0, 1]:
@@ -136,14 +136,13 @@ def test_schema_2(lines_pattern: list[int], template: NconTemplate, d: int):
             assert tf.abs(out_state[idx][idx] - bitstrings_probs[idx]) < 1e-6
 
 
-@pytest.mark.parametrize("d", [2])
-def test_schema_3_simple(d: int):
+def test_schema_3_simple():
     """This is a test made to make the next test work"""
     in_state = tf.constant([1] + 63 * [0], dtype=COMPLEX)
     gates: list[tf.Tensor] = []
 
     for _ in range(3):
-        gates.append(create_random_channel(1, d))
+        gates.append(create_random_channel(1))
 
     lines = []
     kronned_3 = util.kron(gates[0], util.kron(gates[1], gates[2]))
@@ -172,8 +171,8 @@ def test_schema_3_simple(d: int):
                 idx = bit_1 * 4 + bit_2 * 2 + bit_3
                 assert tf.abs(out_state[idx][idx] - bitstrings_probs[idx]) < 1e-6
 
-@pytest.mark.parametrize("d", [2])
-def test_schema_3(d: int):
+
+def test_schema_3():
     # pattern 1.1.1. - 2(0,1) - 1.1.1 - 2(1,2) - 1.1.1 - 2(0,2) - 1.1.1
 
     in_state = tf.constant([1] + 63 * [0], dtype=COMPLEX)
@@ -182,11 +181,11 @@ def test_schema_3(d: int):
     gates: list[tf.Tensor] = []
 
     for _ in range(12):
-        gates.append(create_random_channel(1, d))
+        gates.append(create_random_channel(1))
         # gates.append(tf.eye(4, dtype=COMPLEX))
 
     for _ in range(3):
-        gates.append(create_random_channel(2, d))
+        gates.append(create_random_channel(2))
         # gates.append(tf.eye(16, dtype=COMPLEX))
 
     gates_ncon = gates.copy()

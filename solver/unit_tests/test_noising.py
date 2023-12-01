@@ -12,12 +12,12 @@ from solver.utils.testing import same_matrix, is_choi, create_random_channel, is
 MANIF = qgo.manifolds.StiefelManifold()
 
 
-@pytest.mark.parametrize("d", [2])
-def test_zero_noise(d: int):
-    channel = create_random_channel(1, d)
+# @pytest.mark.parametrize("d", [2])
+def test_zero_noise():
+    channel = create_random_channel(1)
     assert same_matrix(ns.make_1q_hybrid_channel(channel, tf.convert_to_tensor([0., 0., 0.], dtype=COMPLEX)), channel)
 
-    channel2 = util.convert_2q_from16x16(create_random_channel(2, d))
+    channel2 = util.convert_2q_from16x16(create_random_channel(2))
     assert same_matrix(ns.make_2q_hybrid_channel(channel2, [0, 0, 0]), channel2)
 
     unitary1 = MANIF.random((2, 2), dtype=COMPLEX)
