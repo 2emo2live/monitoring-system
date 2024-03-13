@@ -12,8 +12,25 @@ def create_unitary_rotation_y(angle: float) -> tf.Tensor:
     """
     Creates a unitary operator describing rotations of quantum state via Y axis.
     """
-    return tf.convert_to_tensor([[math.cos(angle/2), -math.sin(angle/2)],
-                                [+math.sin(angle/2), math.cos(angle/2)]], dtype=COMPLEX)
+    return tf.convert_to_tensor([[math.cos(angle / 2), -math.sin(angle / 2)],
+                                 [+math.sin(angle / 2), math.cos(angle / 2)]], dtype=COMPLEX)
+
+
+@tf.function
+def generalized_rotation_y(angle: float, dim: int, i: int, j: int) -> tf.Tensor:
+    """
+    Creates a unitary operator describing rotations of quantum state via Y axis for qudit
+    dim - number of qudit dimensions
+    i, j - addressed levels of qudit
+    """
+    ket_i = numpy.zeros(dim, dtype=numpy.complex128)
+    ket_i[i] = 1
+    ket_j = numpy.zeros(dim, dtype=numpy.complex128)
+    ket_j[j] = 1
+    ketbra_ij = numpy.tensordot(ket_i, ket_j.T, axes=0)
+    ketbra_ji = numpy.tensordot(ket_j, ket_i.T, axes=0)
+    pauli_y = angle/2 * (ketbra_ji - ketbra_ij)
+    return tf.convert_to_tensor(scipy.linalg.expm(pauli_y), dtype=COMPLEX)
 
 
 @tf.function
@@ -21,8 +38,8 @@ def create_unitary_rotation_x(angle: float) -> tf.Tensor:
     """
     Creates a unitary operator describing rotations of quantum state via X axis.
     """
-    return tf.convert_to_tensor([[math.cos(angle/2) + 0j, -1j * math.sin(angle/2)],
-                                [-1j * math.sin(angle/2), math.cos(angle/2) + 0j]], dtype=COMPLEX)
+    return tf.convert_to_tensor([[math.cos(angle / 2) + 0j, -1j * math.sin(angle / 2)],
+                                 [-1j * math.sin(angle / 2), math.cos(angle / 2) + 0j]], dtype=COMPLEX)
 
 
 @tf.function
@@ -30,8 +47,8 @@ def create_unitary_rotation_z(angle: float) -> tf.Tensor:
     """
     Creates a unitary operator describing rotations of quantum state via Z axis.
     """
-    return tf.convert_to_tensor([[math.cos(angle/2) - 1j * math.sin(angle/2), 0],
-                                [0, math.cos(angle/2) + 1j * math.sin(angle/2)]], dtype=COMPLEX)
+    return tf.convert_to_tensor([[math.cos(angle / 2) - 1j * math.sin(angle / 2), 0],
+                                 [0, math.cos(angle / 2) + 1j * math.sin(angle / 2)]], dtype=COMPLEX)
 
 
 @tf.function
@@ -291,3 +308,8 @@ def diamond_norm_2q(channel1: tf.Tensor, channel2: tf.Tensor) -> tf.Tensor:
     diff = choi_2qchannel_forqiskit(channel1) - choi_2qchannel_forqiskit(channel2)
     diff_qiskit = Choi(diff.numpy())
     return tf.convert_to_tensor(diamond_norm(diff_qiskit))
+
+    # def create_1qudit_gate(u: tf.Tensor, dim: int, pos: int) -> tf.Tensor:
+    """
+    Creates a single qudit gate from a qubit gate u for a qubit on position pos.
+    """
