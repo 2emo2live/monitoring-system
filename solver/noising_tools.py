@@ -5,64 +5,46 @@ import solver.utils.general_utils as util
 import solver.utils.channel_utils as c_util
 from solver.utils.misc import COMPLEX, TENSOR
 
-sigmaX = tf.constant([[0. + 0.j, 1 + 0.j],
-                      [1. + 0.j, 0. + 0.j]], dtype=COMPLEX)
-sigmaY = tf.constant([[0. + 0.j, 0. - 1j],
-                      [0. + 1j, 0. + 0.j]], dtype=COMPLEX)
-sigmaZ = tf.constant([[1, 0],
-                      [0, -1]], dtype=COMPLEX)
+
+def create_sigmaX(dim: int = 2, ind: int = 1) -> TENSOR:
+    #TODO: add other indices
+    assert(ind == 1, "WIP")
+    ket_0 = np.zeros(dim, dtype=np.complex128)
+    ket_0[0] = 1
+    ket_1 = np.zeros(dim, dtype=np.complex128)
+    ket_1[1] = 1
+    ketbra_01 = np.tensordot(ket_0, ket_1.T, axes=0)
+    ketbra_10 = np.tensordot(ket_1, ket_0.T, axes=0)
+    sigmaX = ketbra_01 - ketbra_10
+    return tf.convert_to_tensor(sigmaX, dtype=COMPLEX)
+
+
+def create_sigmaY(dim: int = 2, ind: int = 1) -> TENSOR:
+    assert(ind == 1, "WIP")
+    ket_0 = np.zeros(dim, dtype=np.complex128)
+    ket_0[0] = 1
+    ket_1 = np.zeros(dim, dtype=np.complex128)
+    ket_1[1] = 1
+    ketbra_01 = np.tensordot(ket_0, ket_1.T, axes=0)
+    ketbra_10 = np.tensordot(ket_1, ket_0.T, axes=0)
+    sigmaY = ketbra_01*1j - ketbra_10*1j
+    return tf.convert_to_tensor(sigmaY, dtype=COMPLEX)
+
+
+def create_sigmaZ(dim: int = 2, ind: int = 1) -> TENSOR:
+    assert(ind == 1, "WIP")
+    ket_0 = np.zeros(dim, dtype=np.complex128)
+    ket_0[0] = 1
+    ket_1 = np.zeros(dim, dtype=np.complex128)
+    ket_1[1] = 1
+    ketbra_00 = np.tensordot(ket_0, ket_0.T, axes=0)
+    ketbra_11 = np.tensordot(ket_1, ket_1.T, axes=0)
+    sigmaZ = ketbra_00 - ketbra_11
+    return tf.convert_to_tensor(sigmaZ, dtype=COMPLEX)
+
+
 E = tf.eye(2, dtype=COMPLEX)
 E_channel = c_util.convert_1qmatrix_to_channel(E)
-
-
-# def make_1q_AD_channel(target: tf.Tensor, args_list: list[float]) -> tf.Tensor:
-#     """
-#     TODO: Write docstring
-#     """
-#     assert len(args_list) == 1  # TODO: make custom exception instead of asserts
-#     gamma = args_list[0]
-#
-#     e0 = tf.convert_to_tensor([[1, 0], [0, tf.math.sqrt(1 - gamma)]], dtype=COMPLEX)
-#     e1 = tf.convert_to_tensor([[0, tf.math.sqrt(gamma)], [0, 0]], dtype=COMPLEX)
-#     e0_channel = c_util.convert_1qmatrix_to_channel(e0)
-#     e1_channel = c_util.convert_1qmatrix_to_channel(e1)
-#     output = (e0_channel + e1_channel) @ target
-#     return output
-#
-#
-# def make_1q_PD_channel(target: tf.Tensor, args_list: list[float]) -> tf.Tensor:
-#     """
-#     TODO: Write docstring
-#     """
-#     assert len(args_list) == 1
-#     gamma = args_list[0]
-#
-#     e0 = tf.convert_to_tensor([[1, 0], [0, tf.math.sqrt(1 - gamma)]], dtype=COMPLEX)
-#     e1 = tf.convert_to_tensor([[0, 0], [0, tf.math.sqrt(gamma)]], dtype=COMPLEX)
-#     e0_channel = c_util.convert_1qmatrix_to_channel(e0)
-#     e1_channel = c_util.convert_1qmatrix_to_channel(e1)
-#     output = (e0_channel + e1_channel) @ target
-#     return output
-
-
-# def make_1q_APD_channel(target: tf.Tensor, args_list: tf.Tensor) -> tf.Tensor:
-#     """
-#     TODO: Write docstring
-#     """
-#     gamma = args_list[0]
-#
-#     e0 = tf.convert_to_tensor([[1, 0], [0, tf.math.sqrt(1 - gamma)]], dtype=COMPLEX)
-#     e1_p = tf.convert_to_tensor([[0, 0], [0, tf.math.sqrt(gamma)]], dtype=COMPLEX)
-#     e1_a = tf.convert_to_tensor([[0, tf.math.sqrt(gamma)], [0, 0]], dtype=COMPLEX)
-#     e0_channel = c_util.convert_1qmatrix_to_channel(e0)
-#     e1_p_channel = c_util.convert_1qmatrix_to_channel(e1_p)
-#     e1_a_channel = c_util.convert_1qmatrix_to_channel(e1_a)
-#
-#     # TODO: check correctness
-#     output = (e0_channel + e1_p_channel) @ target
-#     output = (e0_channel + e1_a_channel) @ output
-#
-#     return output
 
 
 @tf.function
@@ -70,9 +52,9 @@ def create_1q_depol_matrix(p: TENSOR) -> TENSOR:
     """
     Creates a Tensor(4, 4)[complex128] describing a 1-qubit depolarizing quantum channel
     """
-    depol = (c_util.convert_1qmatrix_to_channel(sigmaX) * p * 0.25 +
-             c_util.convert_1qmatrix_to_channel(sigmaY) * p * 0.25 +
-             c_util.convert_1qmatrix_to_channel(sigmaZ) * p * 0.25 +
+    depol = (c_util.convert_1qmatrix_to_channel(create_sigmaX(1, 1)) * p * 0.25 +
+             c_util.convert_1qmatrix_to_channel(create_sigmaY(1, 1)) * p * 0.25 +
+             c_util.convert_1qmatrix_to_channel(create_sigmaZ(1, 1)) * p * 0.25 +
              E_channel * (1 - 0.75 * p))
     return depol
 
@@ -84,6 +66,9 @@ def create_2q_depol_matrix(p: TENSOR):
     """
     big_e_channel = util.kron(E_channel, E_channel)
     depol = big_e_channel * (1 - p)
+    sigmaX = create_sigmaX(1, 1)
+    sigmaY = create_sigmaY(1, 1)
+    sigmaZ = create_sigmaZ(1, 1)
     for m1 in [sigmaX, sigmaY, sigmaZ, E]:
         for m2 in [sigmaX, sigmaY, sigmaZ, E]:
             m = np.kron(m1, m2)
@@ -118,12 +103,13 @@ def create_AP_matrix(gamma1: TENSOR, gamma2: TENSOR):
 
 
 @tf.function
-def make_1q_hybrid_channel(target: TENSOR, args_list: TENSOR) -> TENSOR:
+def make_1q_hybrid_channel(target: TENSOR, args_list: TENSOR, ind: int = 1) -> TENSOR:
     """
     Args:
         target: a Tensor(4,4)[complex128] - a channel, which we are noising now will be applied
         args_list: a Tensor(3)[float] containing arguments for applying noise models.
         First arg is p for depolarization, and args 2 & 3 are for gamma1 & gamma2 - params for APD
+        ind: index of target qubit inside qudit
 
     Returns:
         Tensor(4,4)[complex128] - new noised channel
@@ -135,10 +121,10 @@ def make_1q_hybrid_channel(target: TENSOR, args_list: TENSOR) -> TENSOR:
     ap_channel = create_AP_matrix(gamma1, gamma2)
 
     output = (target * (1 - p) +
-              c_util.convert_1qmatrix_to_channel(sigmaX) * p * 0.25 +
+              c_util.convert_1qmatrix_to_channel(create_sigmaX(1, ind)) * p * 0.25 +
               E_channel * p * 0.25 +
-              c_util.convert_1qmatrix_to_channel(sigmaY) * p * 0.25 +
-              c_util.convert_1qmatrix_to_channel(sigmaZ) * p * 0.25)
+              c_util.convert_1qmatrix_to_channel(create_sigmaY(1, ind)) * p * 0.25 +
+              c_util.convert_1qmatrix_to_channel(create_sigmaZ(1, ind)) * p * 0.25)
     output = ap_channel @ output @ ap_channel
 
     return output
@@ -173,7 +159,7 @@ def make_2q_hybrid_channel(target: TENSOR, args_list: TENSOR) -> TENSOR:
 
 
 @tf.function
-def nearest_kron_product(A: TENSOR, n_qb: int) -> TENSOR:
+def nearest_kron_product(A: TENSOR, n_qd: int) -> TENSOR:
     """
     Yields nearest Kronecker product to a matrix.
 
@@ -184,16 +170,17 @@ def nearest_kron_product(A: TENSOR, n_qb: int) -> TENSOR:
     argument A, and so the complexity scales like O((N^2)^3) = O(N^6).
     Args:
         A: m x n matrix
-        n_qb: number of qubits which define the dimension
+        n_qd: number of qudits which define the dimension
     Returns:
         Approximating factor B (but calculates both B and C)
     """
-    Bshape = [2 ** n_qb, 2 ** n_qb]
+    dim = A.shape[0]
+    Bshape = [dim ** n_qd, dim ** n_qd]
     # Cshape = A.shape[0] // Bshape[0], A.shape[1] // Bshape[1]
 
     blocks = map(lambda blockcol: tf.split(blockcol, Bshape[0], 0),
                  tf.split(A, Bshape[1], 1))
-    Atilde = tf.stack([tf.reshape(block, (-1, )) for blockcol in blocks
+    Atilde = tf.stack([tf.reshape(block, (-1,)) for blockcol in blocks
                        for block in blockcol])
 
     s, U, V = tf.linalg.svd(Atilde)
@@ -268,7 +255,7 @@ def create_2q_dispersed_channel(target: TENSOR, sigma: float) -> TENSOR:
 
 
 @tf.function
-def make_1q_4pars_channel(target: TENSOR, args_list: list[float]) -> TENSOR:
+def make_1q_4pars_channel(target: TENSOR, args_list: list[float], ind: int = 1) -> TENSOR:
     """
     TODO: Write docstring
     """
@@ -276,7 +263,7 @@ def make_1q_4pars_channel(target: TENSOR, args_list: list[float]) -> TENSOR:
     # p_dep, gamma1, gamma2, sigma = args_list
 
     disp_channel = create_1q_dispersed_channel(target, args_list[0])
-    output = make_1q_hybrid_channel(disp_channel, args_list[1:])
+    output = make_1q_hybrid_channel(disp_channel, args_list[1:], ind)
 
     return output
 
@@ -292,4 +279,3 @@ def make_2q_4pars_channel(target: TENSOR, args_list: list[float]) -> TENSOR:
     output = make_2q_hybrid_channel(disp_channel, args_list[1:])
 
     return output
-

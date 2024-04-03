@@ -21,7 +21,7 @@ NoiseParams = tp.Optional[dict[str, list[tuple[int, TENSOR]]]]
 EXP_CONST = 50
 
 
-def get_complex_channel_form(target: GateSet) -> GateSet:
+def get_complex_channel_form(target: GateSet, dim: int = 2) -> GateSet:
     """
     Since functions qgo.manifolds.real_to_complex() and convert_params_to_channel() cannot be applied to a dict,
     this function breaks the dict into Tensors=arrays of gates and then converts each array one-by-one
@@ -30,12 +30,13 @@ def get_complex_channel_form(target: GateSet) -> GateSet:
         target: a python dictionary containing some real-valued parameter representations
         of tensors that are in fact complex; shape is (..., 2)
 
+
     Returns:
         Complex-valued tensors in a dictionary with the same grouping
     """
     new_dict = {}
     for name in target:
-        new_dict[name] = c_util.convert_params_to_channel(qgo.manifolds.real_to_complex(target[name]))
+        new_dict[name] = c_util.convert_params_to_channel(qgo.manifolds.real_to_complex(target[name]), dim)
     return new_dict
 
 
@@ -52,16 +53,18 @@ class BaseSolver:
     TODO: Better docstring
     """
     def __init__(self,
-                 qubits_num: int,
-                 single_qub_gates_names: set[str],
-                 two_qub_gates_names: set[str],
+                 qudits_num: int,
+                 single_qud_gates_names: set[str],
+                 two_qud_gates_names: set[str],
                  pure_channels_set: GateSet,
+                 dim: int = 2,
                  compress_samples: bool = False,
                  noise_params: NoiseParams = None):
-        self.n = qubits_num
-        self.single_qub_gates_names = single_qub_gates_names
-        self.two_qub_gates_names = two_qub_gates_names
-        assert len(pure_channels_set) == len(single_qub_gates_names) + len(two_qub_gates_names) + 1
+        self.n = qudits_num
+        self.dim = dim
+        self.single_qud_gates_names = single_qud_gates_names
+        self.two_qud_gates_names = two_qud_gates_names
+        assert len(pure_channels_set) == len(single_qud_gates_names) + len(two_qud_gates_names) + 1
 
         self.ideal_gates_list: list[TENSOR] = []
         for name in pure_channels_set:
@@ -85,9 +88,9 @@ class BaseSolver:
         """
         """
         for name in pure_channels_set:
-            if name in self.single_qub_gates_names:
+            if name in self.single_qud_gates_names:
                 self.hidden_gates_dict[name] = tf.concat([pure_channels_set[name][tf.newaxis]] * self.n, axis=0)
-            elif name in self.two_qub_gates_names:
+            elif name in self.two_qud_gates_names:
                 self.hidden_gates_dict[name] = tf.concat([pure_channels_set[name][tf.newaxis]] *
                                                          (self.n * (self.n - 1)), axis=0)
             elif name == ID_GATE:
@@ -113,17 +116,17 @@ class BaseSolver:
         """
         tensors, net_struc, con_order, out_order = tmpl
         new_tensors = tensors.copy()
-        e_id = len(self.single_qub_gates_names) * self.n
+        e_id = len(self.single_qud_gates_names) * self.n
 
         for idx, old_tensor_id in enumerate(tensors):
             if old_tensor_id == e_id:
-                new_tensors[idx] = len(self.single_qub_gates_names)
+                new_tensors[idx] = len(self.single_qud_gates_names)
             elif old_tensor_id < e_id:
                 new_tensors[idx] = old_tensor_id // self.n
             else:
                 shifted = old_tensor_id - e_id - 1
                 new_tensors[idx] = shifted // (self.n * (self.n - 1))
-                new_tensors[idx] += len(self.single_qub_gates_names) + 1
+                new_tensors[idx] += len(self.single_qud_gates_names) + 1
 
         new_template = [new_tensors, net_struc, con_order, out_order]
         return new_template
@@ -135,7 +138,7 @@ class BaseSolver:
 
     def generate_sample(self, name: str, smpl_size=10000) -> None:
         """
-        Creates a batch of all-qubit samples for a circuit with name 'name'
+        Creates a batch of all-qudit samples for a circuit with name 'name'
         using the 'hidden' evaluator.
         """
         sample = self.eval_hidden.make_full_samples(name, smpl_size)
@@ -167,7 +170,7 @@ class BaseSolver:
         for idx, gate_type in enumerate(channels_dict):  # 'S', 'H', etc.
             if gate_type == ID_GATE:
                 pass
-            elif gate_type in self.single_qub_gates_names:
+            elif gate_type in self.single_qud_gates_names:
                 gate_type_norm = tf.math.abs(tf.linalg.norm(channels_dict[gate_type] -
                                                             self.ideal_gates_list[idx]) ** 2)
                 total_reg += gate_type_norm * lmbd1
@@ -243,15 +246,15 @@ class QGOptSolver(BaseSolver):
     TODO: better docstring
     """
     def __init__(self,
-                 qubits_num: int,
-                 single_qub_gates_names: set[str],
-                 two_qub_gates_names: set[str],
+                 qudits_num: int,
+                 single_qud_gates_names: set[str],
+                 two_qud_gates_names: set[str],
                  pure_channels_set: GateSet,
                  compress_samples: bool = False,
                  noise_params: NoiseParams = None,
                  initial_estimated_gates_override: tp.Optional[dict[str, tf.Variable]] = None,
                  noise_iter0: float = 0.0):
-        super().__init__(qubits_num, single_qub_gates_names, two_qub_gates_names, pure_channels_set,
+        super().__init__(qudits_num, single_qud_gates_names, two_qud_gates_names, pure_channels_set,
                          compress_samples, noise_params)
 
         if initial_estimated_gates_override is not None:
@@ -271,32 +274,33 @@ class QGOptSolver(BaseSolver):
         # TODO: write tests on this checkpoint loading procedure
         if initial_estimated_gates_override.keys() != pure_channels_set.keys():
             raise ValueError("Wrong set of quantum gates")
-        for one_qub_key in self.single_qub_gates_names:
-            assert initial_estimated_gates_override[one_qub_key].shape[0] == self.n, \
-                f"Wrong number of noised gates for single-qubit gate {one_qub_key}, must be {self.n}"
-            assert initial_estimated_gates_override[one_qub_key].shape[1:] == (4, 4, 2), \
-                f"Wrong shape of passed gates with label {one_qub_key}, must be {(4, 4, 2)}"
-        for two_qub_key in self.two_qub_gates_names:
-            assert initial_estimated_gates_override[two_qub_key].shape[0] == self.n * (self.n - 1), \
-                f"Wrong number of noised gates for two-qubit gate {two_qub_key}," \
+        for one_qud_key in self.single_qud_gates_names:
+            assert initial_estimated_gates_override[one_qud_key].shape[0] == self.n, \
+                f"Wrong number of noised gates for single-qubit gate {one_qud_key}, must be {self.n}"
+            assert initial_estimated_gates_override[one_qud_key].shape[1:] == pure_channels_set[one_qud_key].shape[1:], \
+                f"Wrong shape of passed gates with label {one_qud_key}, must be {(pure_channels_set[one_qud_key].shape[1:])}"
+        for two_qud_key in self.two_qud_gates_names:
+            assert initial_estimated_gates_override[two_qud_key].shape[0] == self.n * (self.n - 1), \
+                f"Wrong number of noised gates for two-qubit gate {two_qud_key}," \
                 f" must be {self.n * (self.n - 1)}"
-            assert initial_estimated_gates_override[two_qub_key].shape[1:] == (16, 16, 2), \
-                f"Wrong shape of passed gates with label {two_qub_key}, must be {(16, 16, 2)}"
+            assert initial_estimated_gates_override[two_qud_key].shape[1:] == (pure_channels_set[two_qud_key].shape[1:]), \
+                f"Wrong shape of passed gates with label {two_qud_key}, must be {(pure_channels_set[two_qud_key].shape[1:])}"
 
-    def _init_estimated(self, pure_channels_set: GateSet, noise_iter0: float = 0.0) -> None:
+    def _init_estimated(self, pure_channels_set: GateSet, noise_iter0: float = 0.0, ind: int = 1) -> None:
+        #TODO: add ind as var
         init_noise = tf.convert_to_tensor([noise_iter0, 0.0, 0.0], dtype=FLOAT)
         for name in pure_channels_set:
-            if name in self.single_qub_gates_names:
-                noised_channel = ns.make_1q_hybrid_channel(pure_channels_set[name], init_noise)
-                params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel))
+            if name in self.single_qud_gates_names:
+                noised_channel = ns.make_1q_hybrid_channel(pure_channels_set[name], init_noise, ind)
+                params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel, self.dim))
                 self.estimated_gates_dict[name] = tf.Variable(tf.concat([params[tf.newaxis]] * self.n, axis=0))
-            elif name in self.two_qub_gates_names:
+            elif name in self.two_qud_gates_names:
                 noised_channel = ns.make_2q_hybrid_channel(pure_channels_set[name], init_noise)
-                params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel))
+                params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel, self.dim))
                 self.estimated_gates_dict[name] = tf.Variable(tf.concat([params[tf.newaxis]] *
                                                                         (self.n * (self.n - 1)), axis=0))
             elif name == ID_GATE:
-                params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(pure_channels_set[ID_GATE]))
+                params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(pure_channels_set[ID_GATE], self.dim))
                 self.estimated_gates_dict[ID_GATE] = tf.Variable(params[tf.newaxis])
             else:
                 raise ValueError('Gate was not specified during __init__')  # TODO: custom exception
@@ -571,17 +575,17 @@ FUNCS = {'M': util.get_povm_dist,
 
 class QGOptSolverDebug(QGOptSolver):
     def __init__(self,
-                 qubits_num: int,
-                 single_qub_gates_names: set[str],
-                 two_qub_gates_names: set[str],
+                 qudits_num: int,
+                 single_qud_gates_names: set[str],
+                 two_qud_gates_names: set[str],
                  pure_channels_set: GateSet,
                  compress_samples: bool = False,
                  noise_params: NoiseParams = None,
                  initial_estimated_gates_override: tp.Optional[dict[str, tf.Variable]] = None,
                  noise_iter0: float = 0.0):
-        super().__init__(qubits_num=qubits_num,
-                         single_qub_gates_names=single_qub_gates_names,
-                         two_qub_gates_names=two_qub_gates_names,
+        super().__init__(qudits_num=qudits_num,
+                         single_qud_gates_names=single_qud_gates_names,
+                         two_qud_gates_names=two_qud_gates_names,
                          pure_channels_set=pure_channels_set,
                          compress_samples=compress_samples,
                          noise_params=noise_params,
@@ -624,7 +628,7 @@ class QGOptSolverDebug(QGOptSolver):
 
             if fid_ctr > 0 and iteration % fid_ctr == 0:
                 channels_dict = get_complex_channel_form(self.estimated_gates_dict)
-                for gate_name in self.single_qub_gates_names:
+                for gate_name in self.single_qud_gates_names:
                     for gate_id in range(self.n):
                         func = FUNCS[gate_name] if gate_name in FUNCS else util.diamond_norm_1q
                         fid = func(channels_dict[gate_name][gate_id],
@@ -635,7 +639,7 @@ class QGOptSolverDebug(QGOptSolver):
                                    self.pure_channels_set[gate_name])
                         fids_dict[(gate_name, gate_id, 'i')].append(fid)
 
-                for gate_name in self.two_qub_gates_names:
+                for gate_name in self.two_qud_gates_names:
                     for gate_id in range(self.n * (self.n - 1)):
                         fid = util.diamond_norm_2q(channels_dict[gate_name][gate_id],
                                                    self.hidden_gates_dict[gate_name][gate_id])

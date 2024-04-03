@@ -6,24 +6,25 @@ from solver.utils.misc import INT
 @tf.function
 def convert_2qmatrix_to_channel(four_legged_unitary: tf.Tensor) -> tf.Tensor:
     """
-    Converts 2-qubit unitary gate U into a quantum channel U x U*.
+    Converts 2-qudit unitary gate U into a quantum channel U x U*.
 
-    Unitary must be first converted to four-legged Tensor(2,2,2,2) representing a channel in ncon form.
+    Unitary must be first converted to four-legged Tensor(dim,dim,dim,dim) representing a channel in ncon form.
     """
+    d = four_legged_unitary.shape[0]
     phi = tf.tensordot(four_legged_unitary, tf.math.conj(four_legged_unitary), axes=0)
     phi = tf.transpose(phi, perm=(0, 4, 1, 5, 2, 6, 3, 7))
-    phi = tf.reshape(phi, (4, 4, 4, 4))
+    phi = tf.reshape(phi, (d**2, d**2, d**2, d**2))
     return phi
 
 
 @tf.function
 def convert_1qmatrix_to_channel(unitary: tf.Tensor) -> tf.Tensor:
     """
-    Converts 1-qubit unitary Tensor(2,2) into a ncon quantum channel Tensor(4,4).
+    Converts 1-qudit unitary Tensor(dim,dim) into a ncon quantum channel Tensor(dim^2,dim^2).
     """
     phi = tf.tensordot(unitary, tf.math.conj(unitary), axes=0)
     phi = tf.transpose(phi, perm=(0, 2, 1, 3))
-    phi = tf.reshape(phi, (4, 4))
+    phi = tf.reshape(phi, (unitary.shape[0]**2, unitary.shape[0]**2))
     return phi
 
 
@@ -92,7 +93,7 @@ def convert_params_to_channel_2legs(params: tf.Tensor) -> tf.Tensor:
 
 
 @tf.function
-def convert_params_to_channel(params: tf.Tensor) -> tf.Tensor:
+def convert_params_to_channel(params: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Converts a batch of parameter matrices A into quantum channel representations A * A^dagger.
 
@@ -100,14 +101,15 @@ def convert_params_to_channel(params: tf.Tensor) -> tf.Tensor:
 
     Args:
         params: Tensor(batch_size, dim^2, dim^2).
+        dim: number of qudit dimensions
 
     Returns:
         A ncon channel - Tensor(batch_size, dim^2, dim^2) (single-qubit case)
         or Tensor(batch_size, dim, dim, dim, dim) (two-qubit case)
     """
-    if params.shape[-2:] == [16, 16]:
+    if params.shape[-2:] == [dim**4, dim**4]:
         return convert_params_to_channel_4legs(params)
-    elif params.shape[-2:] == [4, 4]:
+    elif params.shape[-2:] == [dim**2, dim**2]:
         return convert_params_to_channel_2legs(params)
     else:
         raise NotImplementedError('Right now only conversion of shapes (4,4) and (16,16) is properly tested')
@@ -170,7 +172,7 @@ def convert_channel_to_params_4legs(phis: tf.Tensor) -> tf.Tensor:
 
 
 @tf.function
-def convert_channel_to_params(phis: tf.Tensor) -> tf.Tensor:
+def convert_channel_to_params(phis: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Converts a batch of ncon quantum channels (reshaped & transposed A * A^dagger) into parameter matrices A.
 
@@ -179,13 +181,14 @@ def convert_channel_to_params(phis: tf.Tensor) -> tf.Tensor:
     Args:
         phis: ncon quantum channels - Tensor(batch_size, dim^2, dim^2) (single-qubit case)
         OR Tensor(batch_size, dim, dim, dim, dim)  (two-qubit case)
+        dim: number of qudit dimensions
 
     Returns:
         Parameter matrices - Tensor(batch_size, dim^2, dim^2). Decomposition is NOT unique!
     """
-    if len(phis.shape) >= 4 and phis.shape[-4:] == [4, 4, 4, 4]:
+    if len(phis.shape) >= 4 and phis.shape[-4:] == [dim**2, dim**2, dim**2, dim**2]:
         return convert_channel_to_params_4legs(phis)
-    elif phis.shape[-2:] == [4, 4]:
+    elif phis.shape[-2:] == [dim**2, dim**2]:
         return convert_channel_to_params_2legs(phis)
     else:
         raise NotImplementedError('Right now only conversion of shapes (4,4) and (4,4,4,4) is properly tested')

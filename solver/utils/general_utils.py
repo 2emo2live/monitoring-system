@@ -16,20 +16,30 @@ def create_unitary_rotation_y(angle: float) -> tf.Tensor:
                                  [+math.sin(angle / 2), math.cos(angle / 2)]], dtype=COMPLEX)
 
 
+def qudit_rotation_y(angle: float, dim: int = 2, ind: int = 1) -> tf.Tensor:
+    """
+    Creates a unitary operator describing rotations of quantum state via Y axis for qudit
+    dim - number of qudit dimensions
+    ind - index of processed qubit inside qudit
+    """
+
+
 @tf.function
-def generalized_rotation_y(angle: float, dim: int, i: int, j: int) -> tf.Tensor:
+def generalized_rotation_y(angle: float, dim: int = 2, i: int = 0, j: int = 1) -> tf.Tensor:
     """
     Creates a unitary operator describing rotations of quantum state via Y axis for qudit
     dim - number of qudit dimensions
     i, j - addressed levels of qudit
     """
+    assert i < dim
+    assert j < dim
     ket_i = numpy.zeros(dim, dtype=numpy.complex128)
     ket_i[i] = 1
     ket_j = numpy.zeros(dim, dtype=numpy.complex128)
     ket_j[j] = 1
     ketbra_ij = numpy.tensordot(ket_i, ket_j.T, axes=0)
     ketbra_ji = numpy.tensordot(ket_j, ket_i.T, axes=0)
-    pauli_y = angle/2 * (ketbra_ji - ketbra_ij)
+    pauli_y = angle/2 * (ketbra_ji*1j - ketbra_ij*1j) * (-1j)
     return tf.convert_to_tensor(scipy.linalg.expm(pauli_y), dtype=COMPLEX)
 
 
@@ -156,13 +166,13 @@ def choi_swap_2qchannel(channel: tf.Tensor) -> tf.Tensor:
     return channel
 
 
-def choi_swap_1qchannel(channel: tf.Tensor) -> tf.Tensor:
+def choi_swap_1qchannel(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Converts a ncon Tensor(4,4) representing 1qubit channel to Tensor(4,4) in Choi matrix representation.
     """
-    channel = tf.reshape(channel, (2, 2, 2, 2))
+    channel = tf.reshape(channel, (dim, dim, dim, dim))
     channel = tf.transpose(channel, (0, 2, 1, 3))
-    channel = tf.reshape(channel, (4, 4))
+    channel = tf.reshape(channel, (dim**2, dim**2))
     return channel
 
 
@@ -308,8 +318,3 @@ def diamond_norm_2q(channel1: tf.Tensor, channel2: tf.Tensor) -> tf.Tensor:
     diff = choi_2qchannel_forqiskit(channel1) - choi_2qchannel_forqiskit(channel2)
     diff_qiskit = Choi(diff.numpy())
     return tf.convert_to_tensor(diamond_norm(diff_qiskit))
-
-    # def create_1qudit_gate(u: tf.Tensor, dim: int, pos: int) -> tf.Tensor:
-    """
-    Creates a single qudit gate from a qubit gate u for a qubit on position pos.
-    """
