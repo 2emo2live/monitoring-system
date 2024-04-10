@@ -6,9 +6,9 @@ import solver.utils.channel_utils as c_util
 from solver.utils.misc import COMPLEX, TENSOR
 
 
-def create_sigmaX(dim: int = 2, ind: int = 1) -> TENSOR:
+def create_sigmaX(dim: int = 2, ind: int = 0) -> TENSOR:
     #TODO: add other indices
-    assert(ind == 1, "WIP")
+    assert(ind == 0, "WIP")
     ket_0 = np.zeros(dim, dtype=np.complex128)
     ket_0[0] = 1
     ket_1 = np.zeros(dim, dtype=np.complex128)
@@ -19,8 +19,8 @@ def create_sigmaX(dim: int = 2, ind: int = 1) -> TENSOR:
     return tf.convert_to_tensor(sigmaX, dtype=COMPLEX)
 
 
-def create_sigmaY(dim: int = 2, ind: int = 1) -> TENSOR:
-    assert(ind == 1, "WIP")
+def create_sigmaY(dim: int = 2, ind: int = 0) -> TENSOR:
+    assert(ind == 0, "WIP")
     ket_0 = np.zeros(dim, dtype=np.complex128)
     ket_0[0] = 1
     ket_1 = np.zeros(dim, dtype=np.complex128)
@@ -31,8 +31,8 @@ def create_sigmaY(dim: int = 2, ind: int = 1) -> TENSOR:
     return tf.convert_to_tensor(sigmaY, dtype=COMPLEX)
 
 
-def create_sigmaZ(dim: int = 2, ind: int = 1) -> TENSOR:
-    assert(ind == 1, "WIP")
+def create_sigmaZ(dim: int = 2, ind: int = 0) -> TENSOR:
+    assert(ind == 0, "WIP")
     ket_0 = np.zeros(dim, dtype=np.complex128)
     ket_0[0] = 1
     ket_1 = np.zeros(dim, dtype=np.complex128)
@@ -43,27 +43,31 @@ def create_sigmaZ(dim: int = 2, ind: int = 1) -> TENSOR:
     return tf.convert_to_tensor(sigmaZ, dtype=COMPLEX)
 
 
-E = tf.eye(2, dtype=COMPLEX)
-E_channel = c_util.convert_1qmatrix_to_channel(E)
+#E = tf.eye(2, dtype=COMPLEX)
+#E_channel = c_util.convert_1qmatrix_to_channel(E)
 
 
 @tf.function
-def create_1q_depol_matrix(p: TENSOR) -> TENSOR:
+def create_1q_depol_matrix(p: TENSOR, dim: int = 2, ind: int = 0) -> TENSOR:
     """
     Creates a Tensor(4, 4)[complex128] describing a 1-qubit depolarizing quantum channel
     """
-    depol = (c_util.convert_1qmatrix_to_channel(create_sigmaX(1, 1)) * p * 0.25 +
-             c_util.convert_1qmatrix_to_channel(create_sigmaY(1, 1)) * p * 0.25 +
-             c_util.convert_1qmatrix_to_channel(create_sigmaZ(1, 1)) * p * 0.25 +
+    E = tf.eye(dim, dtype=COMPLEX)
+    E_channel = c_util.convert_1qmatrix_to_channel(E)
+    depol = (c_util.convert_1qmatrix_to_channel(create_sigmaX(dim, ind)) * p * 0.25 +
+             c_util.convert_1qmatrix_to_channel(create_sigmaY(dim, ind)) * p * 0.25 +
+             c_util.convert_1qmatrix_to_channel(create_sigmaZ(dim, ind)) * p * 0.25 +
              E_channel * (1 - 0.75 * p))
     return depol
 
 
 @tf.function
-def create_2q_depol_matrix(p: TENSOR):
+def create_2q_depol_matrix(p: TENSOR, dim: int = 2):
     """
     Creates a Tensor(4, 4)[complex128] describing a 2-qubit depolarizing quantum channel
     """
+    E = tf.eye(dim, dtype=COMPLEX)
+    E_channel = c_util.convert_1qmatrix_to_channel(E)
     big_e_channel = util.kron(E_channel, E_channel)
     depol = big_e_channel * (1 - p)
     sigmaX = create_sigmaX(1, 1)
@@ -78,19 +82,57 @@ def create_2q_depol_matrix(p: TENSOR):
 
 
 @tf.function
-def create_AP_matrix(gamma1: TENSOR, gamma2: TENSOR):
+def create_AP_matrix(gamma1: TENSOR, gamma2: TENSOR, dim: int = 2, ind: int = 0):
     """
     Args:
         gamma1: Tensor()[float] - parameter for amplitude damping
-        gamma2: Tensor()[float] - parameter for amplitude damping
+        gamma2: Tensor()[float] - parameter for phase damping
 
     Returns:
-        Tensor(4, 4)[complex128] describing a 1-qubit amplitude damping & phase damping quantum channel
+        Tensor(4, 4)[complex128] describing a 1-qudit amplitude damping & phase damping quantum channel
     """
-    e0_a = tf.convert_to_tensor([[1, 0], [0, tf.math.sqrt(1 - gamma1)]], dtype=COMPLEX)
-    e0_p = tf.convert_to_tensor([[1, 0], [0, tf.math.sqrt(1 - gamma2)]], dtype=COMPLEX)
-    e1_p = tf.convert_to_tensor([[0, 0], [0, tf.math.sqrt(gamma2)]], dtype=COMPLEX)
-    e1_a = tf.convert_to_tensor([[0, tf.math.sqrt(gamma1)], [0, 0]], dtype=COMPLEX)
+    num_of_q = int(np.floor(np.log2(dim)))
+
+    e0_a = np.array([[1, 0], [0, np.sqrt(1 - gamma1)]], dtype=np.cdouble)
+    e0_p = np.array([[1, 0], [0, np.sqrt(1 - gamma2)]], dtype=np.cdouble)
+    e1_p = np.array([[0, 0], [0, np.sqrt(gamma2)]], dtype=np.cdouble)
+    e1_a = np.array([[0, np.sqrt(gamma1)], [0, 0]], dtype=np.cdouble)
+    E = np.eye(2, dtype=np.cdouble)
+
+    if ind != 0:
+        E_n = np.eye(2, dtype=np.cdouble)
+        for i in range(1, ind):
+            E_n = np.tensordot(E_n, E, axes=0)
+        e0_a = np.tensordot(E_n, e0_a, axes=0)
+        e0_p = np.tensordot(E_n, e0_p, axes=0)
+        e1_p = np.tensordot(E_n, e1_p, axes=0)
+        e1_a = np.tensordot(E_n, e1_a, axes=0)
+    for i in range(ind + 1, num_of_q):
+        e0_a = np.tensordot(e0_a, E, axes=0)
+        e0_p = np.tensordot(e0_p, E, axes=0)
+        e1_p = np.tensordot(e1_p, E, axes=0)
+        e1_a = np.tensordot(e1_a, E, axes=0)
+    e0_a = e0_a.reshape((2**num_of_q, 2**num_of_q))
+    e0_p = e0_p.reshape((2**num_of_q, 2**num_of_q))
+    e1_p = e1_p.reshape((2**num_of_q, 2**num_of_q))
+    e1_a = e1_a.reshape((2**num_of_q, 2**num_of_q))
+    for i in range(2**num_of_q, dim):
+        new_row = np.zeros((1, i + 1), dtype=np.cdouble)
+        new_row[0][i] = 1
+        e0_a = np.concatenate([e0_a, np.zeros((i, 1), dtype=np.cdouble)], axis=1)
+        e0_a = np.concatenate([e0_a, new_row], axis=0)
+        e1_a = np.concatenate([e1_a, np.zeros((i, 1), dtype=np.cdouble)], axis=1)
+        e1_a = np.concatenate([e1_a, new_row], axis=0)
+        e0_p = np.concatenate([e0_p, np.zeros((i, 1), dtype=np.cdouble)], axis=1)
+        e0_p = np.concatenate([e0_p, new_row], axis=0)
+        e1_p = np.concatenate([e1_p, np.zeros((i, 1), dtype=np.cdouble)], axis=1)
+        e1_p = np.concatenate([e1_p, new_row], axis=0)
+
+    e0_a = tf.convert_to_tensor(e0_a, dtype=COMPLEX)
+    e0_p = tf.convert_to_tensor(e0_p, dtype=COMPLEX)
+    e1_p = tf.convert_to_tensor(e1_p, dtype=COMPLEX)
+    e1_a = tf.convert_to_tensor(e1_a, dtype=COMPLEX)
+
     e0_a_channel = c_util.convert_1qmatrix_to_channel(e0_a)
     e0_p_channel = c_util.convert_1qmatrix_to_channel(e0_p)
     e1_p_channel = c_util.convert_1qmatrix_to_channel(e1_p)
@@ -103,28 +145,31 @@ def create_AP_matrix(gamma1: TENSOR, gamma2: TENSOR):
 
 
 @tf.function
-def make_1q_hybrid_channel(target: TENSOR, args_list: TENSOR, ind: int = 1) -> TENSOR:
+def make_1q_hybrid_channel(target: TENSOR, args_list: TENSOR, dim: int = 2, ind: int = 0) -> TENSOR:
     """
     Args:
         target: a Tensor(4,4)[complex128] - a channel, which we are noising now will be applied
         args_list: a Tensor(3)[float] containing arguments for applying noise models.
         First arg is p for depolarization, and args 2 & 3 are for gamma1 & gamma2 - params for APD
         ind: index of target qubit inside qudit
+        dim: number of dimensions of qudit
 
     Returns:
         Tensor(4,4)[complex128] - new noised channel
     """
+    E = tf.eye(dim, dtype=COMPLEX)
+    E_channel = c_util.convert_1qmatrix_to_channel(E)
     p = tf.cast(args_list[0], COMPLEX)
     gamma1 = args_list[1] / 2
     gamma2 = args_list[2] / 2
 
-    ap_channel = create_AP_matrix(gamma1, gamma2)
+    ap_channel = create_AP_matrix(gamma1, gamma2, dim, ind)
 
     output = (target * (1 - p) +
-              c_util.convert_1qmatrix_to_channel(create_sigmaX(1, ind)) * p * 0.25 +
+              c_util.convert_1qmatrix_to_channel(create_sigmaX(dim, ind)) * p * 0.25 +
               E_channel * p * 0.25 +
-              c_util.convert_1qmatrix_to_channel(create_sigmaY(1, ind)) * p * 0.25 +
-              c_util.convert_1qmatrix_to_channel(create_sigmaZ(1, ind)) * p * 0.25)
+              c_util.convert_1qmatrix_to_channel(create_sigmaY(dim, ind)) * p * 0.25 +
+              c_util.convert_1qmatrix_to_channel(create_sigmaZ(dim, ind)) * p * 0.25)
     output = ap_channel @ output @ ap_channel
 
     return output
@@ -159,7 +204,7 @@ def make_2q_hybrid_channel(target: TENSOR, args_list: TENSOR) -> TENSOR:
 
 
 @tf.function
-def nearest_kron_product(A: TENSOR, n_qd: int) -> TENSOR:
+def nearest_kron_product(A: TENSOR, n_qd: int, dim: int = 2) -> TENSOR:
     """
     Yields nearest Kronecker product to a matrix.
 
@@ -171,10 +216,10 @@ def nearest_kron_product(A: TENSOR, n_qd: int) -> TENSOR:
     Args:
         A: m x n matrix
         n_qd: number of qudits which define the dimension
+        dim: number of dimensions of qudits
     Returns:
         Approximating factor B (but calculates both B and C)
     """
-    dim = A.shape[0]
     Bshape = [dim ** n_qd, dim ** n_qd]
     # Cshape = A.shape[0] // Bshape[0], A.shape[1] // Bshape[1]
 
@@ -213,12 +258,12 @@ def _dispersed_eigs(lambds: TENSOR, sigma: float) -> TENSOR:
 
 
 @tf.function
-def create_1q_dispersed_channel(target: TENSOR, sigma: float) -> TENSOR:
+def create_1q_dispersed_channel(target: TENSOR, sigma: float, dim: int = 2) -> TENSOR:
     """
     TODO: Write docstring
     """
     # it seems that Choi form coincides with our channel in single-qubit case
-    basic_gate = nearest_kron_product(target, 1)
+    basic_gate = nearest_kron_product(target, 1, dim)
 
     eigenvals, eigenvecs = tf.linalg.eig(basic_gate)
 
@@ -255,15 +300,15 @@ def create_2q_dispersed_channel(target: TENSOR, sigma: float) -> TENSOR:
 
 
 @tf.function
-def make_1q_4pars_channel(target: TENSOR, args_list: list[float], ind: int = 1) -> TENSOR:
+def make_1q_4pars_channel(target: TENSOR, args_list: list[float], dim: int = 2, ind: int = 0) -> TENSOR:
     """
     TODO: Write docstring
     """
     # assert (len(args_list) == 4)
     # p_dep, gamma1, gamma2, sigma = args_list
 
-    disp_channel = create_1q_dispersed_channel(target, args_list[0])
-    output = make_1q_hybrid_channel(disp_channel, args_list[1:], ind)
+    disp_channel = create_1q_dispersed_channel(target, args_list[0], dim)
+    output = make_1q_hybrid_channel(disp_channel, args_list[1:], dim, ind)
 
     return output
 

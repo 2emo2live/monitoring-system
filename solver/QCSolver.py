@@ -250,11 +250,12 @@ class QGOptSolver(BaseSolver):
                  single_qud_gates_names: set[str],
                  two_qud_gates_names: set[str],
                  pure_channels_set: GateSet,
+                 dim: int = 2,
                  compress_samples: bool = False,
                  noise_params: NoiseParams = None,
                  initial_estimated_gates_override: tp.Optional[dict[str, tf.Variable]] = None,
                  noise_iter0: float = 0.0):
-        super().__init__(qudits_num, single_qud_gates_names, two_qud_gates_names, pure_channels_set,
+        super().__init__(qudits_num, single_qud_gates_names, two_qud_gates_names, pure_channels_set, dim,
                          compress_samples, noise_params)
 
         if initial_estimated_gates_override is not None:
@@ -286,12 +287,12 @@ class QGOptSolver(BaseSolver):
             assert initial_estimated_gates_override[two_qud_key].shape[1:] == (pure_channels_set[two_qud_key].shape[1:]), \
                 f"Wrong shape of passed gates with label {two_qud_key}, must be {(pure_channels_set[two_qud_key].shape[1:])}"
 
-    def _init_estimated(self, pure_channels_set: GateSet, noise_iter0: float = 0.0, ind: int = 1) -> None:
+    def _init_estimated(self, pure_channels_set: GateSet, noise_iter0: float = 0.0, ind: int = 0) -> None:
         #TODO: add ind as var
         init_noise = tf.convert_to_tensor([noise_iter0, 0.0, 0.0], dtype=FLOAT)
         for name in pure_channels_set:
             if name in self.single_qud_gates_names:
-                noised_channel = ns.make_1q_hybrid_channel(pure_channels_set[name], init_noise, ind)
+                noised_channel = ns.make_1q_hybrid_channel(pure_channels_set[name], init_noise, self.dim, ind)
                 params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel, self.dim))
                 self.estimated_gates_dict[name] = tf.Variable(tf.concat([params[tf.newaxis]] * self.n, axis=0))
             elif name in self.two_qud_gates_names:
@@ -335,7 +336,7 @@ class QGOptSolver(BaseSolver):
 
             loss = -total_logp + self.get_gaussian_reg(channels_dict, lmbd1, lmbd2)
 
-            grad = tape.gradient(loss, self.estimated_gates_dict)
+            grad = tape.gradient(loss, self.estimated_gates_dict) #производная первого аргумента по второму
 
         return loss, grad
 
@@ -579,6 +580,7 @@ class QGOptSolverDebug(QGOptSolver):
                  single_qud_gates_names: set[str],
                  two_qud_gates_names: set[str],
                  pure_channels_set: GateSet,
+                 dim: int = 2,
                  compress_samples: bool = False,
                  noise_params: NoiseParams = None,
                  initial_estimated_gates_override: tp.Optional[dict[str, tf.Variable]] = None,
@@ -587,6 +589,7 @@ class QGOptSolverDebug(QGOptSolver):
                          single_qud_gates_names=single_qud_gates_names,
                          two_qud_gates_names=two_qud_gates_names,
                          pure_channels_set=pure_channels_set,
+                         dim=dim,
                          compress_samples=compress_samples,
                          noise_params=noise_params,
                          initial_estimated_gates_override=initial_estimated_gates_override,

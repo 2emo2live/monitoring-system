@@ -16,14 +16,6 @@ def create_unitary_rotation_y(angle: float) -> tf.Tensor:
                                  [+math.sin(angle / 2), math.cos(angle / 2)]], dtype=COMPLEX)
 
 
-def qudit_rotation_y(angle: float, dim: int = 2, ind: int = 1) -> tf.Tensor:
-    """
-    Creates a unitary operator describing rotations of quantum state via Y axis for qudit
-    dim - number of qudit dimensions
-    ind - index of processed qubit inside qudit
-    """
-
-
 @tf.function
 def generalized_rotation_y(angle: float, dim: int = 2, i: int = 0, j: int = 1) -> tf.Tensor:
     """
@@ -39,7 +31,7 @@ def generalized_rotation_y(angle: float, dim: int = 2, i: int = 0, j: int = 1) -
     ket_j[j] = 1
     ketbra_ij = numpy.tensordot(ket_i, ket_j.T, axes=0)
     ketbra_ji = numpy.tensordot(ket_j, ket_i.T, axes=0)
-    pauli_y = angle/2 * (ketbra_ji*1j - ketbra_ij*1j) * (-1j)
+    pauli_y = angle/2 * (-ketbra_ji*1j + ketbra_ij*1j) * 1j
     return tf.convert_to_tensor(scipy.linalg.expm(pauli_y), dtype=COMPLEX)
 
 
@@ -168,7 +160,7 @@ def choi_swap_2qchannel(channel: tf.Tensor) -> tf.Tensor:
 
 def choi_swap_1qchannel(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
-    Converts a ncon Tensor(4,4) representing 1qubit channel to Tensor(4,4) in Choi matrix representation.
+    Converts a ncon Tensor(dim**2,dim**2) representing 1qudit channel to Tensor(dim**2,dim**2) in Choi matrix representation.
     """
     channel = tf.reshape(channel, (dim, dim, dim, dim))
     channel = tf.transpose(channel, (0, 2, 1, 3))
@@ -176,14 +168,14 @@ def choi_swap_1qchannel(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
     return channel
 
 
-def fidel_calc_1q(channel1: tf.Tensor, channel2: tf.Tensor) -> tf.Tensor:
+def fidel_calc_1q(channel1: tf.Tensor, channel2: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
-    Calculates fidelity between two arbitrary ncon 1-qubit channels represented as Tensors(4,4)[complex128]
+    Calculates fidelity between two arbitrary ncon 1-qubit channels represented as Tensors(dim**2,dim**2)[complex128]
     """
-    choi1 = choi_swap_1qchannel(channel1) / tf.constant(2, COMPLEX)
+    choi1 = choi_swap_1qchannel(channel1, dim) / tf.constant(dim, COMPLEX)
     sqrt_choi1 = scipy.linalg.sqrtm(choi1)
 
-    choi2 = choi_swap_1qchannel(channel2) / tf.constant(2, COMPLEX)
+    choi2 = choi_swap_1qchannel(channel2, dim) / tf.constant(dim, COMPLEX)
 
     sqrt_matrix = scipy.linalg.sqrtm(sqrt_choi1 @ choi2 @ sqrt_choi1)
     sqrt_matrix = sqrt_matrix.astype(numpy.complex128)
@@ -280,14 +272,14 @@ def get_prep_dist(channel1: tf.Tensor, channel2: tf.Tensor) -> tf.Tensor:
     return tf.reduce_sum(tf.abs(eigs)) / tf.constant(2, dtype=FLOAT)
 
 
-def choi_1qchannel_forqiskit(channel: tf.Tensor) -> tf.Tensor:
+def choi_1qchannel_forqiskit(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Converts a ncon Tensor(4,4) representing 1qubit channel to Tensor(4,4) in Choi matrix representation.
     Meaningful partial trace is over 1st subsystem now.
     """
-    channel = tf.reshape(channel, (2, 2, 2, 2))
+    channel = tf.reshape(channel, (dim, dim, dim, dim))
     channel = tf.transpose(channel, (2, 0, 3, 1))
-    channel = tf.reshape(channel, (4, 4))
+    channel = tf.reshape(channel, (dim**2, dim**2))
     return channel
 
 
@@ -302,11 +294,11 @@ def choi_2qchannel_forqiskit(channel: tf.Tensor) -> tf.Tensor:
     return channel
 
 
-def diamond_norm_1q(channel1: tf.Tensor, channel2: tf.Tensor) -> tf.Tensor:
+def diamond_norm_1q(channel1: tf.Tensor, channel2: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Calculates POVM distance between two single-qubit quantum channels.
     """
-    diff = choi_1qchannel_forqiskit(channel1) - choi_1qchannel_forqiskit(channel2)
+    diff = choi_1qchannel_forqiskit(channel1, dim) - choi_1qchannel_forqiskit(channel2, dim)
     diff_qiskit = Choi(diff.numpy())
     return tf.convert_to_tensor(diamond_norm(diff_qiskit))
 
