@@ -97,12 +97,15 @@ class ExperimentConductor:
         noise_params = defaultdict(list)
         for tup in noise_cfg:
             name, index, func = tup[0:3]
+            if len(tup) == 4:
+                tup.append(2) #dim
+                tup.append(0) #ind
+            dim, ind = tup[-2:]
 
             args = []
-            for i in range(3, len(tup)):
+            for i in range(3, len(tup) - 2):
                 args.append(tup[i])
-            new_tensor = func(pure_channels_set[name], args)
-
+            new_tensor = func(pure_channels_set[name], args, dim, ind)
             noise_params[name].append((index, new_tensor))
 
         self.noise_params = dict(noise_params)

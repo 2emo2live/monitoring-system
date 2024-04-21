@@ -92,35 +92,57 @@ def create_AP_matrix(gamma1: TENSOR, gamma2: TENSOR, dim: int = 2, ind: int = 0)
     Returns:
         Tensor(4, 4)[complex128] describing a 1-qudit amplitude damping & phase damping quantum channel
     """
-    num_of_q = int(np.floor(np.log2(dim)))
 
-    e0_a = np.array([[1, 0], [0, np.sqrt(1 - gamma1)]], dtype=np.cdouble)
+    num_of_q = int(np.floor(np.log2(dim)))
+    E = np.eye(4, dtype=np.cdouble)
+    E = tf.convert_to_tensor(E, dtype=COMPLEX)
+
+    e0_a = tf.convert_to_tensor([[1, 0], [0, tf.math.sqrt(1 - gamma1)]], dtype=COMPLEX)
+    e0_p = tf.convert_to_tensor([[1, 0], [0, tf.math.sqrt(1 - gamma2)]], dtype=COMPLEX)
+    e1_p = tf.convert_to_tensor([[0, 0], [0, tf.math.sqrt(gamma2)]], dtype=COMPLEX)
+    e1_a = tf.convert_to_tensor([[0, tf.math.sqrt(gamma1)], [0, 0]], dtype=COMPLEX)
+    e0_a_channel = c_util.convert_1qmatrix_to_channel(e0_a)
+    e0_p_channel = c_util.convert_1qmatrix_to_channel(e0_p)
+    e1_p_channel = c_util.convert_1qmatrix_to_channel(e1_p)
+    e1_a_channel = c_util.convert_1qmatrix_to_channel(e1_a)
+
+    ap_channel = (e0_a_channel + e1_a_channel) @ (e0_p_channel + e1_p_channel)
+
+    if ind != 0:
+        E_n = E
+        for i in range(1, ind):
+            E_n = util.kron(E_n, E)
+        ap_channel = util.kron(E_n, ap_channel)
+
+    for i in range(ind + 1, num_of_q):
+        ap_channel = util.kron(ap_channel, E)
+
+    ap_channel = tf.reshape(ap_channel, (2**(2*num_of_q), 2**(2*num_of_q)))
+
+    '''e0_a = np.array([[1, 0], [0, np.sqrt(1 - gamma1)]], dtype=np.cdouble)
     e0_p = np.array([[1, 0], [0, np.sqrt(1 - gamma2)]], dtype=np.cdouble)
     e1_p = np.array([[0, 0], [0, np.sqrt(gamma2)]], dtype=np.cdouble)
     e1_a = np.array([[0, np.sqrt(gamma1)], [0, 0]], dtype=np.cdouble)
-    E = np.eye(2, dtype=np.cdouble)
 
     if ind != 0:
-        '''E_n = np.eye(2, dtype=np.cdouble)
         for i in range(1, ind):
-            E_n = np.tensordot(E_n, E, axes=0)'''
-        e0_a = np.tensordot(e0_a, e0_a, axes=0)
-        e0_p = np.tensordot(e0_p, e0_p, axes=0)
-        e1_p = np.tensordot(e1_p, e1_p, axes=0)
-        e1_a = np.tensordot(e1_a, e1_a, axes=0)
+            e0_a = np.tensordot(e0_a, e0_a, axes=0)
+            e0_p = np.tensordot(e0_p, e0_p, axes=0)
+            e1_p = np.tensordot(e1_p, e1_p, axes=0)
+            e1_a = np.tensordot(e1_a, e1_a, axes=0)
 
     for i in range(ind + 1, num_of_q):
-        e0_a = np.tensordot(e0_a, e0_a, axes=0)
-        e0_p = np.tensordot(e0_p, e0_p, axes=0)
-        e1_p = np.tensordot(e1_p, e1_p, axes=0)
-        e1_a = np.tensordot(e1_a, e1_a, axes=0)
+        e0_a = np.tensordot(e0_a, E, axes=0)
+        e0_p = np.tensordot(e0_p, E, axes=0)
+        e1_p = np.tensordot(e1_p, E, axes=0)
+        e1_a = np.tensordot(e1_a, E, axes=0)
 
-    e0_a = e0_a.reshape((2**num_of_q, 2**num_of_q))
-    e0_p = e0_p.reshape((2**num_of_q, 2**num_of_q))
-    e1_p = e1_p.reshape((2**num_of_q, 2**num_of_q))
-    e1_a = e1_a.reshape((2**num_of_q, 2**num_of_q))
+    e0_a = e0_a.reshape((2 ** num_of_q, 2 ** num_of_q))
+    e0_p = e0_p.reshape((2 ** num_of_q, 2 ** num_of_q))
+    e1_p = e1_p.reshape((2 ** num_of_q, 2 ** num_of_q))
+    e1_a = e1_a.reshape((2 ** num_of_q, 2 ** num_of_q))
 
-    for i in range(2**num_of_q, dim):
+    for i in range(2 ** num_of_q, dim):
         new_row = np.zeros((1, i + 1), dtype=np.cdouble)
         new_row[0][i] = 1
         e0_a = np.concatenate([e0_a, np.zeros((i, 1), dtype=np.cdouble)], axis=1)
@@ -132,10 +154,10 @@ def create_AP_matrix(gamma1: TENSOR, gamma2: TENSOR, dim: int = 2, ind: int = 0)
         e1_p = np.concatenate([e1_p, np.zeros((i, 1), dtype=np.cdouble)], axis=1)
         e1_p = np.concatenate([e1_p, np.zeros((1, i + 1), dtype=np.cdouble)], axis=0)
 
-    #print("a0: ", e0_a)
-    #print("a1: ", e1_a)
-    #print("p0: ", e0_p)
-    #print("p1: ", e1_p)
+    # print("a0: ", e0_a)
+    # print("a1: ", e1_a)
+    # print("p0: ", e0_p)
+    # print("p1: ", e1_p)
 
     e0_a = tf.convert_to_tensor(e0_a, dtype=COMPLEX)
     e0_p = tf.convert_to_tensor(e0_p, dtype=COMPLEX)
@@ -148,16 +170,16 @@ def create_AP_matrix(gamma1: TENSOR, gamma2: TENSOR, dim: int = 2, ind: int = 0)
     e1_a_channel = c_util.convert_1qmatrix_to_channel(e1_a)
 
     tf.print("e0_a: ", tf.math.real(tf.math.reduce_sum(e0_a_channel[0])), output_stream=sys.stdout)
-    #tf.print("element sum: ", tf.math.real(tf.math.reduce_sum(e0_a_channel)), output_stream=sys.stdout)
+    # tf.print("element sum: ", tf.math.real(tf.math.reduce_sum(e0_a_channel)), output_stream=sys.stdout)
 
     tf.print("a0: ", tf.math.real(e0_a), output_stream=sys.stdout)
-    #tf.print("a1: ", tf.math.real(e1_a), output_stream=sys.stdout)
-    #tf.print("p0: ", tf.math.real(e0_p), output_stream=sys.stdout)
-    #tf.print("p1: ", tf.math.real(e1_p), output_stream=sys.stdout)
+    # tf.print("a1: ", tf.math.real(e1_a), output_stream=sys.stdout)
+    # tf.print("p0: ", tf.math.real(e0_p), output_stream=sys.stdout)
+    # tf.print("p1: ", tf.math.real(e1_p), output_stream=sys.stdout)
 
     # TODO: check correctness
     ap_channel = (e0_a_channel + e1_a_channel) @ (e0_p_channel + e1_p_channel)
-    tf.print("DebugPrint: ", tf.math.real(ap_channel), output_stream=sys.stdout)
+    tf.print("DebugPrint: ", tf.math.real(ap_channel), output_stream=sys.stdout)'''
 
     return ap_channel
 

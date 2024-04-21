@@ -80,11 +80,11 @@ class BaseSolver:
         if self.compress:
             self.samples_compressed: dict[str, tf.Tensor] = {}
 
-        self.eval_pure = QCEvaluator(self.ideal_gates_list, self.n)
-        self.eval_hidden = QCEvaluator(unwrap_dict(self.hidden_gates_dict), self.n)
+        self.eval_pure = QCEvaluator(self.ideal_gates_list, self.n, self.dim)
+        self.eval_hidden = QCEvaluator(unwrap_dict(self.hidden_gates_dict), self.n, self.dim)
         self.eval_estimated = None
 
-    def _init_hidden_channels(self, pure_channels_set: GateSet, params: NoiseParams = None) -> None:
+    def _init_hidden_channels(self, pure_channels_set: GateSet, params: NoiseParams = None) -> None: # CHECK
         """
         """
         for name in pure_channels_set:
@@ -103,7 +103,7 @@ class BaseSolver:
 
         for name in params:
             tmp_list = tf.unstack(self.hidden_gates_dict[name])
-            for num, replacement in params[name]:
+            for num, replacement in params[name]:   #?????
                 tmp_list[num] = replacement
             self.hidden_gates_dict[name] = tf.stack(tmp_list)
 
@@ -266,7 +266,7 @@ class QGOptSolver(BaseSolver):
             self.estimated_gates_dict: dict[str, tf.Variable] = {}
             self._init_estimated(pure_channels_set, noise_iter0)
 
-        self.eval_estimated = QCEvaluator(unwrap_dict(get_complex_channel_form(self.estimated_gates_dict)), self.n)
+        self.eval_estimated = QCEvaluator(unwrap_dict(get_complex_channel_form(self.estimated_gates_dict, self.dim)), self.n, self.dim)
         self.timestamps: dict[str, float] = {}
 
     def _run_sanity_checks_for_checkpoint(self,
@@ -320,7 +320,7 @@ class QGOptSolver(BaseSolver):
     # TODO: understand why ncon interferes with tf.function
     def _loss_and_grad(self, lmbd1: float, lmbd2: float, v: bool = False) -> [TENSOR, dict[TENSOR]]:
         with tf.GradientTape() as tape:
-            channels_dict = get_complex_channel_form(self.estimated_gates_dict)
+            channels_dict = get_complex_channel_form(self.estimated_gates_dict, self.dim)
             # The estimated_set consists of several (default - four) tf.Variables. They get unwrapped in a 1D array
             # and then they get passed into 'eval_estimated'
             self.eval_estimated.gates = unwrap_dict(channels_dict)
@@ -359,7 +359,7 @@ class QGOptSolver(BaseSolver):
                                  timestamp: float, v: bool = False) -> [tf.Tensor, dict[tf.Tensor]]:
         with tf.GradientTape() as tape:
             # same as loss and grad but with some time checks and exp
-            channels_dict = get_complex_channel_form(self.estimated_gates_dict)
+            channels_dict = get_complex_channel_form(self.estimated_gates_dict, self.dim)
             self.eval_estimated.gates = unwrap_dict(channels_dict)
 
             dimdim = tf.constant([2] * self.n, dtype=tf.int64)
@@ -596,7 +596,7 @@ class QGOptSolverDebug(QGOptSolver):
                          noise_iter0=noise_iter0)
 
         self.pure_channels_set = pure_channels_set
-        self.starting_pos_dict = get_complex_channel_form(self.estimated_gates_dict)
+        self.starting_pos_dict = get_complex_channel_form(self.estimated_gates_dict, self.dim)
 
     def train_optimizer(self, opt: qgo.optimizers, lmbd1: float, lmbd2: float,
                         iters: int, v: int = 0,
@@ -630,16 +630,16 @@ class QGOptSolverDebug(QGOptSolver):
             loss_dynamics.append(loss)
 
             if fid_ctr > 0 and iteration % fid_ctr == 0:
-                channels_dict = get_complex_channel_form(self.estimated_gates_dict)
+                channels_dict = get_complex_channel_form(self.estimated_gates_dict, self.dim)
                 for gate_name in self.single_qud_gates_names:
                     for gate_id in range(self.n):
                         func = FUNCS[gate_name] if gate_name in FUNCS else util.diamond_norm_1q
                         fid = func(channels_dict[gate_name][gate_id],
-                                   self.hidden_gates_dict[gate_name][gate_id])
+                                   self.hidden_gates_dict[gate_name][gate_id], self.dim)
                         fids_dict[(gate_name, gate_id, 't')].append(fid)
 
                         fid = func(channels_dict[gate_name][gate_id],
-                                   self.pure_channels_set[gate_name])
+                                   self.pure_channels_set[gate_name], self.dim)
                         fids_dict[(gate_name, gate_id, 'i')].append(fid)
 
                 for gate_name in self.two_qud_gates_names:

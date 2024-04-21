@@ -241,12 +241,12 @@ def probs_qubit_swap(channel: tf.Tensor) -> tf.Tensor:
     return tf.concat([probs[0][1], probs[1][0]], axis=0)
 
 
-def get_povm_dist(channel1: tf.Tensor, channel2: tf.Tensor) -> tf.Tensor:
+def get_povm_dist(channel1: tf.Tensor, channel2: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Calculates POVM distance between two single-qubit channels representing (sic!) measurement operators.
     """
-    reshaped_ch1 = tf.reshape(channel1, (2, 2, 2, 2))  # two transposes cancel each other
-    reshaped_ch2 = tf.reshape(channel2, (2, 2, 2, 2))
+    reshaped_ch1 = tf.reshape(channel1, (dim, dim, dim, dim))  # two transposes cancel each other
+    reshaped_ch2 = tf.reshape(channel2, (dim, dim, dim, dim))
 
     m0_1 = reshaped_ch1[0, 0]
     m0_2 = reshaped_ch2[0, 0]
@@ -258,12 +258,12 @@ def get_povm_dist(channel1: tf.Tensor, channel2: tf.Tensor) -> tf.Tensor:
     return tf.reduce_max(tf.abs(eigs))
 
 
-def get_prep_dist(channel1: tf.Tensor, channel2: tf.Tensor) -> tf.Tensor:
+def get_prep_dist(channel1: tf.Tensor, channel2: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Calculates POVM distance between two single-qubit channels representing (sic!) state preparation operators.
     """
-    reshaped_ch1 = tf.reshape(channel1, (2, 2, 2, 2))  # two transposes cancel each other
-    reshaped_ch2 = tf.reshape(channel2, (2, 2, 2, 2))
+    reshaped_ch1 = tf.reshape(channel1, (dim, dim, dim, dim))  # two transposes cancel each other
+    reshaped_ch2 = tf.reshape(channel2, (dim, dim, dim, dim))
 
     rho_in_1 = reshaped_ch1[:, :, 0, 0]
     rho_in_2 = reshaped_ch2[:, :, 0, 0]
