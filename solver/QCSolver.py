@@ -287,12 +287,11 @@ class QGOptSolver(BaseSolver):
             assert initial_estimated_gates_override[two_qud_key].shape[1:] == (pure_channels_set[two_qud_key].shape[1:]), \
                 f"Wrong shape of passed gates with label {two_qud_key}, must be {(pure_channels_set[two_qud_key].shape[1:])}"
 
-    def _init_estimated(self, pure_channels_set: GateSet, noise_iter0: float = 0.0, ind: int = 0) -> None:
-        #TODO: add ind as var
+    def _init_estimated(self, pure_channels_set: GateSet, noise_iter0: float = 0.0) -> None:
         init_noise = tf.convert_to_tensor([noise_iter0, 0.0], dtype=FLOAT) #TODO: check number of noise params
         for name in pure_channels_set:
             if name in self.single_qud_gates_names:
-                noised_channel = ns.make_1q_hybrid_channel(pure_channels_set[name], init_noise, self.dim, ind)
+                noised_channel = ns.make_1q_hybrid_channel(pure_channels_set[name], init_noise, self.dim)
                 params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel, self.dim))
                 self.estimated_gates_dict[name] = tf.Variable(tf.concat([params[tf.newaxis]] * self.n, axis=0))
             elif name in self.two_qud_gates_names:

@@ -97,12 +97,8 @@ class ExperimentConductor:
         noise_params = defaultdict(list)
         for tup in noise_cfg:
             name, index, func = tup[0:3]
-            if len(tup) == 5:    #TODO: change number of params
-                dim = 2
-                ind = 0
-            else:
-                dim, ind = tup[-2:]
-                tup = tup[:-2]
+            dim = tup[-1]
+            tup = tup[:-1]
 
             args = []
             for i in range(3, len(tup)):

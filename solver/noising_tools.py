@@ -143,7 +143,6 @@ def make_1q_hybrid_channel(target: TENSOR, args_list: TENSOR, dim: int = 2) -> T
     Returns:
         Tensor(4,4)[complex128] - new noised channel
     """
-    E = tf.eye(dim, dtype=COMPLEX)
     p = tf.cast(args_list[0], COMPLEX)
     gamma = args_list[1] / 2
 
@@ -281,7 +280,7 @@ def create_2q_dispersed_channel(target: TENSOR, sigma: float) -> TENSOR:
 
 
 @tf.function
-def make_1q_4pars_channel(target: TENSOR, args_list: list[float], dim: int = 2, ind: int = 0) -> TENSOR:
+def make_1q_4pars_channel(target: TENSOR, args_list: list[float], dim: int = 2) -> TENSOR:
     """
     TODO: Write docstring
     """
@@ -290,7 +289,7 @@ def make_1q_4pars_channel(target: TENSOR, args_list: list[float], dim: int = 2, 
 
     #disp_channel = create_1q_dispersed_channel(target, args_list[0], dim)
     #output = make_1q_hybrid_channel(disp_channel, args_list[1:], dim, ind)
-    output = make_1q_hybrid_channel(target, args_list, dim, ind)
+    output = make_1q_hybrid_channel(target, args_list, dim)
 
     return output
 
