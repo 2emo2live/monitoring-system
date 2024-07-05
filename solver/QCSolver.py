@@ -143,7 +143,7 @@ class BaseSolver:
         """
         sample = self.eval_hidden.make_full_samples(name, smpl_size)
         if self.compress:
-            dimdim = tf.constant([2] * self.n, dtype=INT)
+            dimdim = tf.constant([2] * self.n, dtype=INT) #TODO: check dimdim correctness
             ids = util.ravel_multi_index(sample, dimdim)
             compressor = np.bincount(ids, minlength=2 ** self.n)
             self.samples_compressed[name] = tf.convert_to_tensor(compressor, dtype=FLOAT)  # this float is important
@@ -184,8 +184,8 @@ class BaseSolver:
     def true_loss_value(self, lmbd1: float = 1, lmbd2: float = 1):
         channels_dict = self.hidden_gates_dict
 
-        dimdim = tf.constant([2] * self.n, dtype=tf.int64)
-        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(2 ** self.n), dimdim))
+        dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
+        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim)) #TODO: check dimdim amd bitstr correctness
 
         total_logp = tf.constant(0, dtype=FLOAT)
         for name in self.tn_templates:  # we iterate by each circuit, the circuit is defined by its name
@@ -289,7 +289,7 @@ class QGOptSolver(BaseSolver):
 
     def _init_estimated(self, pure_channels_set: GateSet, noise_iter0: float = 0.0, ind: int = 0) -> None:
         #TODO: add ind as var
-        init_noise = tf.convert_to_tensor([noise_iter0, 0.0, 0.0], dtype=FLOAT)
+        init_noise = tf.convert_to_tensor([noise_iter0, 0.0], dtype=FLOAT) #TODO: check number of noise params
         for name in pure_channels_set:
             if name in self.single_qud_gates_names:
                 noised_channel = ns.make_1q_hybrid_channel(pure_channels_set[name], init_noise, self.dim, ind)

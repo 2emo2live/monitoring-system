@@ -112,7 +112,7 @@ def convert_params_to_channel(params: tf.Tensor, dim: int = 2) -> tf.Tensor:
     elif params.shape[-2:] == [dim**2, dim**2]:
         return convert_params_to_channel_2legs(params)
     else:
-        raise NotImplementedError('Right now only conversion of shapes (4,4) and (16,16) is properly tested')
+        raise NotImplementedError('Right now only conversion of shapes (dim,dim) and (dim**2,dim**2) is properly tested')
 
 
 @tf.function
