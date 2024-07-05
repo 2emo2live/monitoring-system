@@ -153,4 +153,3 @@ cython_debug/
 
 # Useless files
 test.py
-tomography-tutorial-qudit.ipynb

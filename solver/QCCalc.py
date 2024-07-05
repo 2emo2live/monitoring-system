@@ -164,7 +164,7 @@ class QCEvaluator:
             big_p = tf.concat([psi[0][tf.newaxis], psi[self.dim**2 - 1][tf.newaxis]], axis=0)
             big_p = big_p / tf.reduce_sum(big_p, keepdims=True)
             log_probs = tf.math.log(big_p)
-            eps = -tf.math.log(-tf.math.log(tf.random.uniform((bs, self.dim), dtype=FLOAT))) #TODO: check if 2 or dim
+            eps = -tf.math.log(-tf.math.log(tf.random.uniform((bs, 2), dtype=FLOAT))) #TODO: check if 2 or dim
             samples = (tf.argmax(log_probs + eps, axis=-1, output_type=tf.int32))
 
 

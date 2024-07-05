@@ -103,7 +103,7 @@ class ExperimentConductor:
             args = []
             for i in range(3, len(tup)):
                 args.append(tup[i])
-            new_tensor = func(pure_channels_set[name], args, dim, ind)
+            new_tensor = func(pure_channels_set[name], args, dim)
             noise_params[name].append((index, new_tensor))
 
         self.noise_params = dict(noise_params)
