@@ -34,6 +34,24 @@ def generalized_rotation_y(angle: float, dim: int = 2, i: int = 0, j: int = 1) -
     pauli_y = angle/2 * (-ketbra_ji*1j + ketbra_ij*1j) * 1j
     return tf.convert_to_tensor(scipy.linalg.expm(pauli_y), dtype=COMPLEX)
 
+@tf.function
+def generalized_rotation_x(angle: float, dim: int = 2, i: int = 0, j: int = 1) -> tf.Tensor:
+    """
+    Creates a unitary operator describing rotations of quantum state via X axis for qudit
+    dim - number of qudit dimensions
+    i, j - addressed levels of qudit
+    """
+    assert i < dim
+    assert j < dim
+    ket_i = numpy.zeros(dim, dtype=numpy.complex128)
+    ket_i[i] = 1
+    ket_j = numpy.zeros(dim, dtype=numpy.complex128)
+    ket_j[j] = 1
+    ketbra_ij = numpy.tensordot(ket_i, ket_j.T, axes=0)
+    ketbra_ji = numpy.tensordot(ket_j, ket_i.T, axes=0)
+    pauli_y = angle/2 * (-ketbra_ji - ketbra_ij) * 1j
+    return tf.convert_to_tensor(scipy.linalg.expm(pauli_y), dtype=COMPLEX)
+
 
 @tf.function
 def create_unitary_rotation_x(angle: float) -> tf.Tensor:
