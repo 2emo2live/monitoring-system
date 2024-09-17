@@ -31,7 +31,7 @@ fastapi==0.95.2
 fastjsonschema==2.16.3
 flatbuffers==23.5.9
 fonttools==4.
-GitPython==3.1.3139.4
+GitPython==3.1.31
 fqdn==1.5.1
 gast==0.4.0
 gitdb==4.0.10
@@ -150,7 +150,7 @@ tensorboard==2.12.3
 tensorboard-data-server==0.7.0
 tensorflow==2.12.0
 tensorflow-estimator==2.12.0
-tensorflow-io-gcs-filesystem==0.32.0
+tensorflow-io-gcs-filesystem==0.31.0
 tensornetwork==0.4.6
 termcolor==2.3.0
 terminado==0.17.1
@@ -169,3 +169,4 @@ websockets==11.0.3
 Werkzeug==2.3.4
 widgetsnbextension==4.0.7
 wrapt==1.14.1
+cyclopts

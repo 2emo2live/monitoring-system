@@ -144,13 +144,13 @@ app = App()
 
 @app.default
 def default():                              # for testing
-    with open('config.json', 'r') as file:
+    with open('input_example/config.json', 'r') as file:
         config = json.load(file)
-    with open('circs.json', 'r') as file:
+    with open('input_example/circs.json', 'r') as file:
         circs = json.load(file)
-    with open('results.json', 'r') as file:
+    with open('input_example/results.json', 'r') as file:
         results = json.load(file)
-    with open('start_estimations.json', 'r') as file:
+    with open('input_example/start_estimations.json', 'r') as file:
         estimates = json.load(file)
 
     result_dict = compute(circs, results, estimates, config['iters'], config['lr'],
