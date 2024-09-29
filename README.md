@@ -1,54 +1,41 @@
-## Monitoring system
+## Входные данные
 
-This project may be used as a monitoring system for quantum processors 
-that allows estimating their parameters based on the set of executed quantum circuits.
-Currently it is in a work-in-progress state with lots of drawbacks -
-typical embodiment of a "research code".   
-However, it was enough to produce satisfactory results,
-as it will be shown in the article, which is going to be finished soon and then published (hopefully).
+1. Конфигурационный файл (config.json): данный файл содержит основные параметры работы системы мониторинга:
+	* ‘iters’ – количество итераций оптимизационного алгоритма (гиперпараметр);
+	* ‘lr’ – гиперпараметр, отвечающий за скорость обучения;
+	* ‘lmbd1’ – параметр регуляризации для однокубитных гейтов;
+	* ‘lmbd2’ – параметр регуляризации для двухкубитных гейтов;
+	* ‘noise’ – параметр деполяризации начальных приближений.
 
-### Requirements 
 
-The main requirements are:
-* python >= 3.9
-* tensorflow >= 2.0
-* [tensornetwork library](https://github.com/google/TensorNetwork)
-* [QGOpt library](https://github.com/LuchnikovI/QGOpt)
+2. Файл с входными квантовыми цепочками (circs.json): данный файл содержит данные о входных цепочках. 
+Каждая цепочка соответствует записи типа list, состоящей из строк вида \<GATE_LABEL\>\_\<TARGET\> для однокубитных гейтов и 
+\<GATE_LABEL\>\_\<TARGET1\>\_\<TARGET2\> для двухкубитных.
 
-[Qiskit](https://qiskit.org/) library is nost used in monitoring system itself, but 
-is required for post-processing and working with IBMQ.
-For a full list of requirements, see `requirements.txt`.
 
-### Installation
+3. Файл с результатами измерений (results.json): данный файл содержит данные о результатах измерения квантовых 
+цепочек в формате словаря (dict), где ключом выступает результат измерения, а значением - количество раз, которое 
+данный результат был получен.
 
-This package is not wrapped into a Python library yet.   
-Right now, as a workaround, one may clone the repository and run the test Jupyter notebooks. 
-They will import .py files directly from the `solver` folder instead of an installed library.
-Mind the required libraries, since there's no wheel package to resolve dependencies automatically.
-After cloning, you may install essential libraries by running shell command
-```shell
-pip install -r requirements.txt
+
+4. Файл с начальными приближениями (start_estimations.json): данный файл содержит приближённые значения гейтов в виде 
+словаря матриц Чоя соответствующих каналов. Каждая запись для однокубитных гейтов имеет вид: 
+
+	<GATE_LABEL>: действительный массив размерности (<QUBITS_NUM>, 4, 4, 2), где <QUBITS_NUM>  – 
+количество кубитов квантового процессора.
+
+	Для двухкубитных гейтов каждая запись имеет вид:
+
+   <GATE_LABEL>: действительный массив размерности (<QUBITS_NUM * (QUBITS_NUM -1) / 2>, 16, 16, 2)
+
+	Два крайних элемента соответствуют действительной и мнимой части соответственно.
+
+	Примеры входных файлов расположены в папке input_example.
+
+## Пример запуска
+
+```commandline
+script_q.py run input_example/config.json input_example/circs.json input_example/results.json input_example/start_estimations.json
 ```
 
-### Basic usage
-
-Right now there is a tomography notebook which can be used as tutorial. 
-It is heavily recommended to look it first;
-the notebook will walk you through the most important parts of conducting experiments.
-
-### Self-testing
-
-Since this project is in a work-in-progress state and is not very well documented (yet),
-it may also be useful to see the folder `solver/unit_tests`. 
-They can provide some insights about the program.
-To run the tests, one should install pytest (it is included in requirements) 
-and run the simple command
-```
-pytest solver/unit_tests
-```
-
-
-
-
-
-
+Результат работы сохраняется в файле estimations.json
