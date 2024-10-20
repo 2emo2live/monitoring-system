@@ -1,6 +1,6 @@
 import warnings
-from cyclopts import App
 import json
+import argparse
 
 with warnings.catch_warnings():  # warning still somehow pierces through, so I cleared the cell output
     import tensorflow as tf  # tf 2.x
@@ -139,18 +139,50 @@ def compute(circuits: list[list[str]], results: list[dict[str, int]], estimates_
     return form_output(QC_t.estimated_gates_dict)
 
 
-app = App()
+DESCRIPTION = 'test'
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description=DESCRIPTION, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        "--config",
+        "-cf",
+        type=str,
+        default="input_example/config.json",
+        help="File with values of parameters",
+    )
+    parser.add_argument(
+        "--circuits",
+        "-c",
+        type=str,
+        default="input_example/circs.json",
+        help="File with list of input circuits",
+    )
+    parser.add_argument(
+        "--results",
+        "-r",
+        type=str,
+        default="input_example/results.json",
+        help="File with measurement results",
+    )
+    parser.add_argument(
+        "--estimations",
+        "-e",
+        type=str,
+        default="input_example/start_estimations.json",
+        help="File with a priori estimations",
+    )
 
-@app.default
-def default():                              # for testing
-    with open('input_example/config.json', 'r') as file:
+    args = parser.parse_args()
+
+    with open(args.config, 'r') as file:
         config = json.load(file)
-    with open('input_example/circs.json', 'r') as file:
+    with open(args.circuits, 'r') as file:
         circs = json.load(file)
-    with open('input_example/results.json', 'r') as file:
+    with open(args.results, 'r') as file:
         results = json.load(file)
-    with open('input_example/start_estimations.json', 'r') as file:
+    with open(args.estimations, 'r') as file:
         estimates = json.load(file)
 
     result_dict = compute(circs, results, estimates, config['iters'], config['lr'],
@@ -159,25 +191,3 @@ def default():                              # for testing
     json_result = json.dumps(result_dict)
     with open("estimations.json", 'w') as file:
         file.write(json_result)
-
-
-@app.command
-def run(config_file: str, circs_file: str, res_file: str, estim_file: str):
-    with open(config_file, 'r') as file:
-        config = json.load(file)
-    with open(circs_file, 'r') as file:
-        circs = json.load(file)
-    with open(res_file, 'r') as file:
-        results = json.load(file)
-    with open(estim_file, 'r') as file:
-        estimates = json.load(file)
-
-    result_dict = compute(circs, results, estimates, config['iters'], config['lr'],
-                          config['lmbd1'], config['lmbd2'], config['noise'])
-
-    json_result = json.dumps(result_dict)
-    with open("estimations.json", 'w') as file:
-        file.write(json_result)
-
-
-app()

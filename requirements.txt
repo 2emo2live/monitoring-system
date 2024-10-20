@@ -169,4 +169,3 @@ websockets==11.0.3
 Werkzeug==2.3.4
 widgetsnbextension==4.0.7
 wrapt==1.14.1
-cyclopts
