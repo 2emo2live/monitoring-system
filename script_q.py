@@ -37,17 +37,25 @@ def apply_noise(noise: float, gates: dict[str, tf.Tensor], single_qub_gates: set
     init_noise = tf.convert_to_tensor([noise, 0.0, 0.0], dtype=FLOAT)
     for name in gates:
         if name in single_qub_gates:
-            noised_channel = ns.make_1q_hybrid_channel(gates[name], init_noise)
-            params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel))
-            noisy_gates[name] = tf.Variable(tf.concat([params[tf.newaxis]], axis=0))
+            noisy_gates[name] = []
+            for g in gates[name]:
+                noised_channel = ns.make_1q_hybrid_channel(g, init_noise)
+                params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel))
+                #noisy_gates[name].append(tf.Variable(tf.concat([params[tf.newaxis]], axis=0)))
+                noisy_gates[name].append(params)
+            noisy_gates[name] = tf.Variable(tf.stack(noisy_gates[name], axis=0))
         elif name in two_qub_gates:
-            noised_channel = ns.make_2q_hybrid_channel(gates[name], init_noise)
-            params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel))
-            noisy_gates[name] = tf.Variable(tf.concat([params[tf.newaxis]]), axis=0)
+            noisy_gates[name] = []
+            for g in gates[name]:
+                noised_channel = ns.make_2q_hybrid_channel(g, init_noise)
+                params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel))
+                #noisy_gates[name].append(tf.Variable(tf.concat([params[tf.newaxis]]), axis=0))
+                noisy_gates[name].append(params)
+            noisy_gates[name] = tf.Variable(tf.stack(noisy_gates[name], axis=0))
         elif name == ID_GATE:
             params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(gates[ID_GATE]))
-            noisy_gates[ID_GATE] = tf.Variable(params[tf.newaxis])
-    return gates
+            noisy_gates[ID_GATE] = tf.Variable(params)
+    return noisy_gates
 
 
 def form_output(estimated_gates_dict: dict[str, tf.Tensor]) -> dict[str, list[float]]:
@@ -112,7 +120,7 @@ def compute(circuits: list[list[str]], results: list[dict[str, int]], estimates_
     if noise == 0:
         QC_t.estimated_gates_dict = estimates
     else:
-        QC_t.estimated_gates_dict = apply_noise(noise, estimates, single_qub_gates, two_qub_gates)
+        QC_t.estimated_gates_dict = apply_noise(noise, QC_t.pure_channels_set, single_qub_gates, two_qub_gates)
 
     for name, tmpl in ncon_tmpls.items():
         QC_t.add_circuit(tn_template=tmpl, name=name)
