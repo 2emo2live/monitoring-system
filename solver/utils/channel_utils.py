@@ -4,16 +4,16 @@ from solver.utils.misc import INT
 
 
 @tf.function
-def convert_2qmatrix_to_channel(four_legged_unitary: tf.Tensor) -> tf.Tensor:
+def convert_2qmatrix_to_channel(four_legged_unitary: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Converts 2-qudit unitary gate U into a quantum channel U x U*.
 
     Unitary must be first converted to four-legged Tensor(dim,dim,dim,dim) representing a channel in ncon form.
     """
-    d = four_legged_unitary.shape[0]
+    #d = four_legged_unitary.shape[0]
     phi = tf.tensordot(four_legged_unitary, tf.math.conj(four_legged_unitary), axes=0)
     phi = tf.transpose(phi, perm=(0, 4, 1, 5, 2, 6, 3, 7))
-    phi = tf.reshape(phi, (d**2, d**2, d**2, d**2))
+    phi = tf.reshape(phi, (dim**2, dim**2, dim**2, dim**2))
     return phi
 
 

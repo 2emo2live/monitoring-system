@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+from math import factorial as fact
 
 import solver.utils.general_utils as util
 import solver.utils.channel_utils as c_util
@@ -8,14 +9,14 @@ from solver.utils.misc import COMPLEX, TENSOR
 import sys
 
 
-def create_Z(dim: int = 2):
+def create_Z(dim: int = 2, pow: int = 1):
     Z = np.eye(dim, dtype=np.complex128)
-    omega = np.exp(1j * 2 * np.pi / dim)
+    omega = np.exp(pow * 1j * 2 * np.pi / dim)
     coef = 1
     for i in range(dim):
         Z[i][i] = coef
         coef *= omega
-    return Z
+    return tf.constant(Z, dtype=COMPLEX)
 
 
 def create_X(dim: int = 2):
@@ -88,7 +89,7 @@ def create_1q_depol_matrix(p: TENSOR, dim: int = 2) -> TENSOR:
             e2 += temp_x @ temp_z
             temp_x = temp_x @ X
         temp_z = temp_z @ Z
-    e2 *= tf.math.sqrt(p/(dim*dim - 1))
+    e2 *= tf.math.sqrt(p / (dim * dim - 1))
     e2_channel = c_util.convert_1qmatrix_to_channel(tf.convert_to_tensor(e2))
 
     return e1_channel + e2_channel
@@ -115,20 +116,43 @@ def create_2q_depol_matrix(p: TENSOR, dim: int = 2):
 
 
 @tf.function
-def create_AP_matrix(gamma: TENSOR, dim: int = 2):
+def create_AP_matrix(gamma1: TENSOR, gamma2: TENSOR, dim: int = 2):
     """
     Args:
-        gamma1: Tensor()[float] - parameter for phase damping
+        gamma1: Tensor()[float] - parameter for amplitude damping
+        gamma2: Tensor()[float] - parameter for amplitude damping
 
     Returns:
         Tensor(4, 4)[complex128] describing a 1-qudit amplitude damping & phase damping quantum channel
     """
-    E = np.eye(dim, dtype=np.complex128)
-    Z = create_Z(dim)
-    e1_channel = c_util.convert_1qmatrix_to_channel(tf.cast(tf.math.sqrt(1 - gamma / 2), dtype=COMPLEX) * tf.convert_to_tensor(E, dtype=COMPLEX))
-    e2_channel = c_util.convert_1qmatrix_to_channel(tf.cast(tf.math.sqrt(gamma / 2), dtype=COMPLEX) * tf.convert_to_tensor(Z, dtype=COMPLEX))
 
-    return e1_channel + e2_channel
+    channel = tf.zeros((dim ** 2, dim ** 2), dtype=COMPLEX)
+    for i in range(dim):
+        ad_kraus = create_ad_single_kraus(i, gamma1, dim=dim)
+        channel += c_util.convert_1qmatrix_to_channel(ad_kraus)
+
+    return channel
+
+
+def create_ad_single_kraus(k: int, gamma: TENSOR, dim: int = 2):
+    """
+    Generates k-th amplitude damping Kraus operator
+    """
+    kraus = tf.zeros((dim, dim), dtype=COMPLEX)
+    for r in range(k, dim):
+        basis_element = util.make_basis_state_matrix(r - k, r, dim=dim)
+        coef = np.sqrt(fact(r) / fact(k) / fact(r - k)) * np.sqrt((1 - gamma) ** (r - k) * gamma ** k)
+        kraus += coef * basis_element
+    return kraus
+
+
+def create_pd_channel(gamma: TENSOR, dim: int = 2):
+    p = (dim - 1) / dim * gamma  # phase flip probability
+    channel = c_util.convert_1qmatrix_to_channel(np.sqrt(1 - p) * tf.eye(dim, dtype=COMPLEX))
+    for i in range(dim - 1):
+        kraus = np.sqrt(p / (dim - 1)) * create_Z(dim, pow=i + 1)
+        channel += c_util.convert_1qmatrix_to_channel(kraus)
+    return channel
 
 
 @tf.function
@@ -149,7 +173,7 @@ def make_1q_hybrid_channel(target: TENSOR, args_list: TENSOR, dim: int = 2) -> T
     ap_channel = create_AP_matrix(gamma, dim)
     dp_channel = create_1q_depol_matrix(p, dim)
 
-    #TODO: check correctness
+    # TODO: check correctness
     output = ap_channel @ dp_channel @ target @ ap_channel
 
     return output
@@ -287,8 +311,8 @@ def make_1q_4pars_channel(target: TENSOR, args_list: list[float], dim: int = 2) 
     # assert (len(args_list) == 4)
     # p_dep, gamma1, gamma2, sigma = args_list
 
-    #disp_channel = create_1q_dispersed_channel(target, args_list[0], dim)
-    #output = make_1q_hybrid_channel(disp_channel, args_list[1:], dim, ind)
+    # disp_channel = create_1q_dispersed_channel(target, args_list[0], dim)
+    # output = make_1q_hybrid_channel(disp_channel, args_list[1:], dim, ind)
     output = make_1q_hybrid_channel(target, args_list, dim)
 
     return output

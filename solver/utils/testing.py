@@ -20,73 +20,56 @@ MIXED_2Q = tf.eye(4, dtype=COMPLEX) / tf.constant(4, dtype=COMPLEX)
 MIXED_1Q = tf.eye(2, dtype=COMPLEX) / tf.constant(2, dtype=COMPLEX)
 
 
-def _pass_choi_sanity(matrix: tf.Tensor, eps: float = 1e-7) -> int:
+def is_dm(matrix: tf.Tensor, eps: float = 1e-7) -> int:
     """
+    Tests whether the input matrix is a vali density matrix
     Returns: 0 if everything is passed
-    1 if one of eigs has imaginary part
-    2 if one of eigs is negative
-    3 if eigs do not sum to 1
+    1 if one is not Hermitian
+    2 if one of eigs has imaginary part
+    3 if one of eigs is negative
+    4 if eigs do not sum to 1
     """
-    eigs = scipy.linalg.eig(matrix)[0]
+
+    if not same_matrix(matrix, tf.transpose(tf.math.conj(matrix))):
+        return 1
+
+    eigs = scipy.linalg.eigh(matrix)[0]
 
     for eig in eigs:
         if tf.abs(tf.math.imag(eig)) > 1e-6:  # weakened from 1e-10 to support float32
             print(f"Eig {eig} has too big imaginary part")
-            return 1
+            return 2
         if tf.math.real(eig) < -1e-6:
             print(f"Eig {eig} is negative")
-            return 2
+            return 3
 
     if tf.abs(eigs.sum() - 1) >= eps:
         print(f"Sum of eigs {eigs.sum()} is too far from 1: norm = {(tf.abs(eigs.sum() - 1)).numpy()}, eps={eps}")
-        return 3
+        return 4
 
     return 0
 
 
-def _is_choi_2q(matrix: tf.Tensor, eps: float = 1e-5) -> bool:
-    if matrix.shape != (16, 16):
-        raise NotImplementedError
+def is_choi(matrix: tf.Tensor, eps: float = 1e-5, dim: int = None) -> bool:
+    if dim is None:
+        dim = int(np.sqrt(matrix.shape[0])) # restoring dimension of a particle from its shape
+    assert matrix.shape == (dim**2, dim**2), f'Wrong dimension of input matrix for checking Choiness: {matrix.shape }'
 
-    if _pass_choi_sanity(matrix, eps=eps) != 0:
-        return False
-    # assert _passes_choi_sanity(matrix) == 0 might be better for debugging & testing
-
-    matrix = tf.reshape(matrix, (4, 4, 4, 4))
-    part_trace = tf.einsum('ijik->jk', matrix)
-    # 'jiki->jk' for 2nd subsystem
-    return same_matrix(part_trace, MIXED_2Q, eps=eps)
-
-
-def _is_choi_1q(matrix: tf.Tensor, eps: float = 1e-5) -> bool:
-    if matrix.shape != (4, 4):
-        raise NotImplementedError
-
-    if _pass_choi_sanity(matrix, eps=eps) != 0:
+    if is_dm(matrix, eps=eps) != 0:
         return False
 
-    matrix = tf.reshape(matrix, (2, 2, 2, 2))
+    matrix = tf.reshape(matrix, (dim, dim, dim, dim))
     part_trace = tf.einsum('ijik->jk', matrix)
-    return same_matrix(part_trace, MIXED_1Q, eps=eps)
+
+    mixed = tf.eye(dim, dtype=COMPLEX) / tf.constant(dim, dtype=COMPLEX)
+    return same_matrix(part_trace, mixed, eps=eps)
 
 
-def is_choi(matrix: tf.Tensor, eps: float = 1e-5) -> bool:
-    if matrix.shape == (4, 4):
-        return _is_choi_1q(matrix, eps=eps)
-    elif matrix.shape == (16, 16):
-        return _is_choi_2q(matrix, eps=eps)
-    raise NotImplementedError('Currently only shapes (4,4) and (16,16) are supported')
-
-
-def is_dm(matrix: tf.Tensor, eps: float = 1e-5) -> bool:
-    return _pass_choi_sanity(matrix, eps) == 0
-
-
-def create_random_channel(qubits: int) -> tf.Tensor:
+def create_random_channel(qubits: int, d: int = 2) -> tf.Tensor:
     """
     ONLY FOR TESTING PURPOSES
     """
-    dim = 2 ** qubits
+    dim = d ** qubits
     dim_squared = dim ** 2
     kraus_rank = np.random.randint(1, dim_squared)
     kraus_ops: list[np.array] = []

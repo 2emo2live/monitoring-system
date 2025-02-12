@@ -2,6 +2,7 @@ import pytest
 import tensorflow as tf
 import QGOpt as qgo
 import typing as tp
+import numpy as np
 
 import solver.utils.general_utils as util
 import solver.noising_tools as ns
@@ -13,8 +14,113 @@ MANIF = qgo.manifolds.StiefelManifold()
 
 
 # @pytest.mark.parametrize("d", [2])
+
+def test_ad_kraus_construction():
+    # Explict test for qubit Kraus operators
+    for gamma in np.linspace(0, 1, 10):
+        A0 = ns.create_ad_single_kraus(0, gamma, dim=2)
+        A1 = ns.create_ad_single_kraus(1, gamma, dim=2)
+        A0_check = np.array([[1, 0], [0, np.sqrt(1 - gamma)]])
+        A1_check = np.array([[0, np.sqrt(gamma)], [0, 0]])
+        assert same_matrix(A0, A0_check)
+        assert same_matrix(A1, A1_check)
+
+    # Explicit test for qutrit Kraus operators
+    for gamma in np.linspace(0, 1, 10):
+        A0 = ns.create_ad_single_kraus(0, gamma, dim=3)
+        A1 = ns.create_ad_single_kraus(1, gamma, dim=3)
+        A2 = ns.create_ad_single_kraus(2, gamma, dim=3)
+
+        A0_check = np.array([[1, 0, 0],
+                             [0, np.sqrt(1 - gamma), 0],
+                             [0, 0, 1 - gamma]])
+        A1_check = np.array([[0, np.sqrt(gamma), 0],
+                             [0, 0, np.sqrt(2 * gamma * (1 - gamma))],
+                             [0, 0, 0]])
+        A2_check = np.array([[0, 0, gamma],
+                             [0, 0, 0],
+                             [0, 0, 0]])
+        assert same_matrix(A0, A0_check)
+        assert same_matrix(A1, A1_check)
+        assert same_matrix(A2, A2_check)
+
+    # Check of normalization condition for Kraus operators
+    for gamma in np.linspace(0, 1, 10):
+        for d in [2, 3, 4]:
+            sum_check = tf.zeros((d, d), dtype=COMPLEX)
+            for i in range(d):
+                A = ns.create_ad_single_kraus(i, gamma, dim=d)
+                sum_check += tf.math.conj(tf.transpose(A) @ A)
+            assert same_matrix(sum_check, tf.eye(d, dtype=COMPLEX))
+
+
+def test_creating_Z():
+    Z2_check = tf.constant([[1, 0], [0, -1]], dtype=COMPLEX)
+    Z3_check = tf.constant([[1, 0, 0],
+                            [0, np.exp(1j * 2 * np.pi / 3), 0],
+                            [0, 0, np.exp(1j * 4 * np.pi / 3)]], dtype=COMPLEX)
+    Z4_check = tf.constant([[1, 0, 0, 0],
+                            [0, np.exp(1j * 2 * np.pi / 4), 0, 0],
+                            [0, 0, np.exp(1j * 4 * np.pi / 4), 0],
+                            [0, 0, 0, np.exp(1j * 6 * np.pi / 4)]], dtype=COMPLEX)
+
+    assert same_matrix(ns.create_Z(2), Z2_check)
+    assert same_matrix(ns.create_Z(3), Z3_check)
+    assert same_matrix(ns.create_Z(4), Z4_check)
+
+    assert same_matrix(ns.create_Z(2, 2), tf.tensordot(Z2_check, Z2_check, axes=1))
+    assert same_matrix(ns.create_Z(3, 2), tf.tensordot(Z3_check, Z3_check, axes=1))
+    assert same_matrix(ns.create_Z(4, 2), tf.tensordot(Z4_check, Z4_check, axes=1))
+
+
+def test_pd_channel():
+    # Testing zero noises
+    for d in [2, 3, 4]:
+        channel = ns.create_pd_channel(0.0, dim=d)
+        assert same_matrix(channel, tf.eye(d ** 2, dtype=COMPLEX))
+    # Testing phase damping
+    for d in [2, 3, 4]:
+        channel = ns.create_pd_channel(1.0, dim=d)
+
+        # Making fully dephased non-normalized density matrix
+        rho = tf.ones(d ** 2, dtype=COMPLEX)
+        rho = tf.tensordot(channel, rho, axes=1)
+
+        # Making fully dephased non-normalized density matrix for the test
+        rho_check = tf.eye(d, dtype=COMPLEX)
+        rho_check = tf.reshape(rho_check, (-1))
+        rho_check = tf.constant(rho_check, dtype=COMPLEX)
+
+        assert same_matrix(rho, rho_check)
+
+
+
+def test_AP_channel():
+    # Testing zero noises
+    for d in [2, 3, 4]:
+        channel = ns.create_AP_matrix(0.0, 0.0, dim=d)
+        assert same_matrix(channel, tf.eye(d ** 2, dtype=COMPLEX))
+    # Testing total amplitude damping
+    for d in [2, 3, 4]:
+        channel = ns.create_AP_matrix(1.0, 0.0, dim=d)
+
+        # Making fully damped non-normalized density matrix
+        rho = tf.eye(d, dtype=COMPLEX)
+        rho = tf.reshape(rho, (-1))
+        rho = tf.tensordot(channel, rho, axes=1)
+
+        # Making fully damped non-normalized density matrix for the test
+        rho_check = [0] * (d ** 2)
+        rho_check[0] = d
+        rho_check = tf.constant(rho_check, dtype=COMPLEX)
+
+        assert same_matrix(rho, rho_check)
+
+
 def test_zero_noise():
-    channel = create_random_channel(1)
+    print(ns.create_ad_single_kraus(0, 0.1, dim=2))
+
+    channel = (1)
     assert same_matrix(ns.make_1q_hybrid_channel(channel, tf.convert_to_tensor([0., 0., 0.], dtype=COMPLEX)), channel)
 
     channel2 = util.convert_2q_from16x16(create_random_channel(2))

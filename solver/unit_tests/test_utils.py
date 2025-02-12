@@ -1,6 +1,7 @@
 import pytest
 import tensorflow as tf
 import QGOpt as qgo
+import numpy as np
 
 import solver.utils.general_utils as util
 import solver.utils.channel_utils as c_util
@@ -15,7 +16,6 @@ KRON_TEST_LIST = [
                   [3, 4]], dtype=COMPLEX),
      tf.constant([[5, 6],
                   [7, 8]], dtype=COMPLEX)),
-
 ]
 
 
@@ -26,6 +26,15 @@ def test_kron(matr_a: tf.Tensor, matr_b: tf.Tensor):
     kronned_matrix = tf.reshape(ein_product, (big_dim, big_dim))
     assert same_matrix(kronned_matrix, util.kron(matr_a, matr_b))
 
+def test_basis_states_construction():
+    for d in range(1, 5):
+        for i in range(d):
+            for j in range(d):
+                np_matr = np.zeros((d, d))
+                np_matr[i, j] = 1
+                tf_matr = tf.constant(np_matr, dtype=COMPLEX)
+                tf_matr_ch = util.make_basis_state_matrix(i, j, dim=d)
+                assert same_matrix(tf_matr, tf_matr_ch)
 
 def test_1q_fidelity_sanity_check():
     for _ in range(5):

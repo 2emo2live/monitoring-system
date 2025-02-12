@@ -8,6 +8,14 @@ from qiskit.quantum_info import diamond_norm, Choi
 
 
 @tf.function
+def make_basis_state_matrix(i, j, dim: int = 2):
+    """
+    Makes a 'dimelements' x 'dim' matrix with a single unit element at '(i,j)'th position
+    """
+    matr = tf.one_hot(i * dim + j, dim * dim, dtype=COMPLEX)
+    return tf.reshape(matr, (dim, dim))
+
+@tf.function
 def create_unitary_rotation_y(angle: float) -> tf.Tensor:
     """
     Creates a unitary operator describing rotations of quantum state via Y axis.
@@ -101,13 +109,13 @@ def ravel_multi_index(multi_index: tf.Tensor, dims: tuple[..., int]) -> tf.Tenso
 
 
 @tf.function
-def convert_44_to_2222(unitary44: tf.Tensor) -> tf.Tensor:
+def convert_44_to_2222(unitary44: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Converts a matrix represented by a Tensor(4,4) to a Tensor(2, 2, 2, 2).
 
     There is a leg swap describing transition from regular 4x4 unitary to a tensor with ncon structure.
     """
-    unitary2222 = tf.reshape(unitary44, (2, 2, 2, 2))
+    unitary2222 = tf.reshape(unitary44, (dim, dim, dim, dim))
     unitary2222 = tf.transpose(unitary2222, (1, 0, 3, 2))
     return unitary2222
 
@@ -123,24 +131,24 @@ def swap_legs(unitary2222: tf.Tensor) -> tf.Tensor:
 
 
 @tf.function
-def convert_2q_to16x16(channel: tf.Tensor) -> tf.Tensor:
+def convert_2q_to16x16(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Converts a ncon Tensor(4,4,4,4) representing 2qubit channel in to Tensor(16,16) in default form.
     """
-    channel = tf.reshape(channel, (2, 2, 2, 2, 2, 2, 2, 2))
+    channel = tf.reshape(channel, (dim, dim, dim, dim, dim, dim, dim, dim))
     channel = tf.transpose(channel, (2, 0, 3, 1, 6, 4, 7, 5))
-    channel = tf.reshape(channel, (16, 16))
+    channel = tf.reshape(channel, (dim**4, dim**4))
     return channel
 
 
 @tf.function
-def convert_2q_from16x16(channel: tf.Tensor) -> tf.Tensor:
+def convert_2q_from16x16(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Converts a 2qubit channel Tensor(16,16) to ncon form with shape (4,4,4,4).
     """
-    channel = tf.reshape(channel, (2, 2, 2, 2, 2, 2, 2, 2))
+    channel = tf.reshape(channel, (dim, dim, dim, dim, dim, dim, dim, dim))
     channel = tf.transpose(channel, (1, 3, 0, 2, 5, 7, 4, 6))
-    channel = tf.reshape(channel, (4, 4, 4, 4))
+    channel = tf.reshape(channel, (dim**2, dim**2, dim**2, dim**2))
     return channel
 
 
@@ -166,13 +174,13 @@ def convert_1q1q_from16x16(kronned_channel: tf.Tensor) -> tf.Tensor:
     return kronned_channel
 
 
-def choi_swap_2qchannel(channel: tf.Tensor) -> tf.Tensor:
+def choi_swap_2qchannel(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Converts a ncon Tensor(4,4,4,4) representing 2qubit channel to Tensor(16,16) in Choi matrix representation.
     """
-    channel = tf.reshape(channel, (2, 2, 2, 2, 2, 2, 2, 2))
+    channel = tf.reshape(channel, (dim, dim, dim, dim, dim, dim, dim, dim))
     channel = tf.transpose(channel, (0, 2, 4, 6, 1, 3, 5, 7))
-    channel = tf.reshape(channel, (16, 16))
+    channel = tf.reshape(channel, (dim**4, dim**4))
     return channel
 
 
