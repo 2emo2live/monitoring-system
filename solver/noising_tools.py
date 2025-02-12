@@ -116,7 +116,7 @@ def create_2q_depol_matrix(p: TENSOR, dim: int = 2):
 
 
 @tf.function
-def create_AP_matrix(gamma1: TENSOR, gamma2: TENSOR, dim: int = 2):
+def create_AP_matrix(gamma1: TENSOR, dim: int = 2):
     """
     Args:
         gamma1: Tensor()[float] - parameter for amplitude damping
@@ -125,7 +125,6 @@ def create_AP_matrix(gamma1: TENSOR, gamma2: TENSOR, dim: int = 2):
     Returns:
         Tensor(4, 4)[complex128] describing a 1-qudit amplitude damping & phase damping quantum channel
     """
-
     channel = tf.zeros((dim ** 2, dim ** 2), dtype=COMPLEX)
     for i in range(dim):
         ad_kraus = create_ad_single_kraus(i, gamma1, dim=dim)
@@ -141,7 +140,9 @@ def create_ad_single_kraus(k: int, gamma: TENSOR, dim: int = 2):
     kraus = tf.zeros((dim, dim), dtype=COMPLEX)
     for r in range(k, dim):
         basis_element = util.make_basis_state_matrix(r - k, r, dim=dim)
-        coef = np.sqrt(fact(r) / fact(k) / fact(r - k)) * np.sqrt((1 - gamma) ** (r - k) * gamma ** k)
+        coef = tf.cast(tf.math.sqrt(fact(r) / fact(k) / fact(r - k)), dtype=tf.float64) * \
+               tf.cast(tf.math.sqrt((1 - gamma) ** (r - k) * gamma ** k), dtype=tf.float64)
+        coef = tf.cast(coef, dtype=COMPLEX)
         kraus += coef * basis_element
     return kraus
 
@@ -169,7 +170,6 @@ def make_1q_hybrid_channel(target: TENSOR, args_list: TENSOR, dim: int = 2) -> T
     """
     p = tf.cast(args_list[0], COMPLEX)
     gamma = args_list[1] / 2
-
     ap_channel = create_AP_matrix(gamma, dim)
     dp_channel = create_1q_depol_matrix(p, dim)
 
