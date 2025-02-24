@@ -143,9 +143,9 @@ class BaseSolver:
         """
         sample = self.eval_hidden.make_full_samples(name, smpl_size)
         if self.compress:
-            dimdim = tf.constant([2] * self.n, dtype=INT) #TODO: check dimdim correctness
+            dimdim = tf.constant([self.dim] * self.n, dtype=INT)
             ids = util.ravel_multi_index(sample, dimdim)
-            compressor = np.bincount(ids, minlength=2 ** self.n)
+            compressor = np.bincount(ids, minlength=self.dim ** self.n)
             self.samples_compressed[name] = tf.convert_to_tensor(compressor, dtype=FLOAT)  # this float is important
         else:
             self.samples_vault[name] = sample
@@ -218,8 +218,8 @@ class BaseSolver:
             assert channels_dict is not None
             self.eval_estimated.gates = unwrap_dict(channels_dict)
 
-        dimdim = tf.constant([2] * self.n, dtype=tf.int64)
-        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(2 ** self.n), dimdim))
+        dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
+        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim))
 
         for name in names:
             sampled_probs = self.samples_compressed[name] / tf.reduce_sum(self.samples_compressed[name])
@@ -324,8 +324,8 @@ class QGOptSolver(BaseSolver):
             # and then they get passed into 'eval_estimated'
             self.eval_estimated.gates = unwrap_dict(channels_dict)
 
-            dimdim = tf.constant([2] * self.n, dtype=tf.int64)
-            all_bitstrings = tf.transpose(tf.unravel_index(np.arange(2 ** self.n), dimdim))
+            dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
+            all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim))
 
             total_logp = tf.constant(0, dtype=FLOAT)
             for name in self.tn_templates:  # we iterate by each circuit, the circuit is defined by its name
@@ -361,8 +361,8 @@ class QGOptSolver(BaseSolver):
             channels_dict = get_complex_channel_form(self.estimated_gates_dict, self.dim)
             self.eval_estimated.gates = unwrap_dict(channels_dict)
 
-            dimdim = tf.constant([2] * self.n, dtype=tf.int64)
-            all_bitstrings = tf.transpose(tf.unravel_index(np.arange(2 ** self.n), dimdim))
+            dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
+            all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim))
 
             total_logp = tf.constant(0, dtype=FLOAT)
             for name in self.tn_templates:
@@ -380,8 +380,8 @@ class QGOptSolver(BaseSolver):
         return loss, grad
 
     def get_circ_l1_norms(self, name: str) -> tuple[tf.Tensor, tf.Tensor]:
-        dimdim = tf.constant([2] * self.n, dtype=tf.int64)
-        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(2 ** self.n), dimdim))
+        dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
+        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim))
 
         probs_pure = self.eval_pure.evaluate(all_bitstrings, name)
         probs_est = self.eval_estimated.evaluate(all_bitstrings, name)
@@ -660,8 +660,8 @@ class QGOptSolverDebug(QGOptSolver):
 
     def _get_current_l1_norm(self):
         # self.eval_estimated.gates = get_complex_channel_form(self.estimated_gates_dict) - SHOULD BE TRUE
-        dimdim = tf.constant([2] * self.n, dtype=tf.int64)
-        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(2 ** self.n), dimdim))
+        dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
+        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim))
 
         l1_norm = tf.constant(0, dtype=FLOAT)
 
@@ -675,8 +675,8 @@ class QGOptSolverDebug(QGOptSolver):
     def _negloglik(self, channels_dict: GateSet) -> tf.Tensor:
         self.eval_estimated.gates = unwrap_dict(channels_dict)
 
-        dimdim = tf.constant([2] * self.n, dtype=tf.int64)
-        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(2 ** self.n), dimdim))
+        dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
+        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim))
 
         total_logp = tf.constant(0, dtype=FLOAT)
         for name in self.tn_templates:  # we iterate by each circuit, the circuit is defined by its name
