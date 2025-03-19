@@ -13,8 +13,8 @@ def assert_psi2_eq_1(qc: BaseSolver, n_q: int, v: bool = False):
     """
     TODO: write docstring
     """
-    dimdim = tf.constant([2] * n_q, dtype=tf.int32)
-    all_bs = tf.transpose(tf.unravel_index(tf.range(2 ** n_q), dimdim))
+    dimdim = tf.constant([qc.dim] * n_q, dtype=tf.int32)
+    all_bs = tf.transpose(tf.unravel_index(tf.range(qc.dim ** n_q), dimdim))
     n_samp = None
 
     all_names = list(qc.samples_compressed.keys()) if qc.compress else list(qc.samples_vault.keys())
@@ -31,7 +31,7 @@ def assert_psi2_eq_1(qc: BaseSolver, n_q: int, v: bool = False):
             if n_samp is None:
                 n_samp = len(qc.samples_vault[name])
             counts = util.ravel_multi_index(qc.samples_vault[name], dimdim)
-            counts = tf.concat([counts, tf.range(2 ** qc.n)], axis=0)
+            counts = tf.concat([counts, tf.range(qc.dim ** qc.n)], axis=0)
             hist_ctr = tf.math.bincount(counts)
             hist_ctr -= 1
 

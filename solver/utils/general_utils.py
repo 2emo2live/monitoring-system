@@ -153,24 +153,24 @@ def convert_2q_from16x16(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
 
 
 @tf.function
-def swap_qubits_in_16x16(channel: tf.Tensor) -> tf.Tensor:
+def swap_qubits_in_16x16(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Swaps controlling and controlled qubits in 16x16 matrix. Physical sense is same as swap_legs.
     """
-    channel = tf.reshape(channel, (2, 2, 2, 2, 2, 2, 2, 2))
+    channel = tf.reshape(channel, (dim, dim, dim, dim, dim, dim, dim, dim))
     channel = tf.transpose(channel, (1, 0, 3, 2, 5, 4, 7, 6))
-    channel = tf.reshape(channel, (16, 16))
+    channel = tf.reshape(channel, (dim**4, dim**4))
     return channel
 
 
 @tf.function
-def convert_1q1q_from16x16(kronned_channel: tf.Tensor) -> tf.Tensor:
+def convert_1q1q_from16x16(kronned_channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Converts a Kronecker product of two 1qubit quantum channels as Tensor(16,16) to ncon form with shape (4,4,4,4)
     """
-    kronned_channel = tf.reshape(kronned_channel, (2, 2, 2, 2, 2, 2, 2, 2))
+    kronned_channel = tf.reshape(kronned_channel, (dim, dim, dim, dim, dim, dim, dim, dim))
     kronned_channel = tf.transpose(kronned_channel, (2, 3, 0, 1, 6, 7, 4, 5))
-    kronned_channel = tf.reshape(kronned_channel, (4, 4, 4, 4))
+    kronned_channel = tf.reshape(kronned_channel, (dim**2, dim**2, dim**2, dim**2))
     return kronned_channel
 
 
@@ -209,14 +209,14 @@ def fidel_calc_1q(channel1: tf.Tensor, channel2: tf.Tensor, dim: int = 2) -> tf.
     return trace ** 2
 
 
-def fidel_calc_2q(channel1: tf.Tensor, channel2: tf.Tensor) -> tf.Tensor:
+def fidel_calc_2q(channel1: tf.Tensor, channel2: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Calculates fidelity between two arbitrary ncon 2-qubit channels represented as Tensors(4,4,4,4)[complex128]
     """
-    choi1 = choi_swap_2qchannel(channel1) / tf.constant(4, COMPLEX)
+    choi1 = choi_swap_2qchannel(channel1) / tf.constant(dim**2, COMPLEX)
     sqrt_choi1 = scipy.linalg.sqrtm(choi1)
 
-    choi2 = choi_swap_2qchannel(channel2) / tf.constant(4, COMPLEX)
+    choi2 = choi_swap_2qchannel(channel2) / tf.constant(dim**2, COMPLEX)
 
     sqrt_matrix = scipy.linalg.sqrtm(sqrt_choi1 @ choi2 @ sqrt_choi1)
     sqrt_matrix = sqrt_matrix.astype(numpy.complex128)
@@ -224,12 +224,16 @@ def fidel_calc_2q(channel1: tf.Tensor, channel2: tf.Tensor) -> tf.Tensor:
     return trace ** 2
 
 
-def get_l1_distances(channel1: tf.Tensor, channel2: tf.Tensor, v: bool = False) -> tf.Tensor:
+def get_l1_distances(channel1: tf.Tensor, channel2: tf.Tensor, dim: int = 2, v: bool = False) -> tf.Tensor:
     """
     Calculates l1 distances between two ncon 1-qubit channels represented as Tensors(4,4)[complex128]
     l1 distances are taken for two input states: |0><0| and |1><1| and are calculated separately.
     """
-    in_states = tf.constant([[1, 0, 0, 0], [0, 0, 0, 1]], dtype=COMPLEX)
+    in_states = []
+    for i in range(0, dim**2, dim + 1):
+        in_states.append([0] * dim ** 2)
+        in_states[i][i] = 1
+    in_states = tf.constant(in_states, dtype=COMPLEX)
     out_states1 = tf.linalg.matvec(a=channel1, b=in_states)
     out_states2 = tf.linalg.matvec(a=channel2, b=in_states)
 
@@ -252,11 +256,15 @@ def get_l1_distances(channel1: tf.Tensor, channel2: tf.Tensor, v: bool = False) 
     return l1_dists / 2
 
 
-def probs_qubit_swap(channel: tf.Tensor) -> tf.Tensor:
+def probs_qubit_swap(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Calculates probability of channel flipping qubit sign from 0 to 1 and from 1 to 0.
     """
-    in_states = tf.constant([[1, 0, 0, 0], [0, 0, 0, 1]], dtype=COMPLEX)
+    in_states = []
+    for i in range(0, dim ** 2, dim + 1):
+        in_states.append([0] * dim ** 2)
+        in_states[i][i] = 1
+    in_states = tf.constant(in_states, dtype=COMPLEX)
     out_states = tf.linalg.matvec(a=channel, b=in_states)
 
     probs = tf.linalg.matmul(a=out_states, b=tf.transpose(in_states))
