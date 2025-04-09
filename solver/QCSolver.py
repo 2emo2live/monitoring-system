@@ -103,7 +103,7 @@ class BaseSolver:
 
         for name in params:
             tmp_list = tf.unstack(self.hidden_gates_dict[name])
-            for num, replacement in params[name]:   #?????
+            for num, replacement in params[name]:
                 tmp_list[num] = replacement
             self.hidden_gates_dict[name] = tf.stack(tmp_list)
 

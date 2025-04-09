@@ -253,7 +253,7 @@ def get_l1_distances(channel1: tf.Tensor, channel2: tf.Tensor, dim: int = 2, v: 
 
     l1_dists = tf.reduce_sum(tf.abs(probs_1 - probs_2), axis=-1)
 
-    return l1_dists / 2
+    return l1_dists / dim
 
 
 def probs_qubit_swap(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
@@ -303,7 +303,7 @@ def get_prep_dist(channel1: tf.Tensor, channel2: tf.Tensor, dim: int = 2) -> tf.
     rho_in_2 = reshaped_ch2[:, :, 0, 0]
     eigs = scipy.linalg.eig(rho_in_1 - rho_in_2)[0]
 
-    return tf.reduce_sum(tf.abs(eigs)) / tf.constant(2, dtype=FLOAT)
+    return tf.reduce_sum(tf.abs(eigs)) / tf.constant(dim, dtype=FLOAT)
 
 
 def choi_1qchannel_forqiskit(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:

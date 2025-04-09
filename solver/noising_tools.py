@@ -29,47 +29,6 @@ def create_X(dim: int = 2):
     return X
 
 
-def create_sigmaX(dim: int = 2, ind: int = 0) -> TENSOR:
-    # TODO: add other indices
-    assert (ind == 0, "WIP")
-    ket_0 = np.zeros(dim, dtype=np.complex128)
-    ket_0[0] = 1
-    ket_1 = np.zeros(dim, dtype=np.complex128)
-    ket_1[1] = 1
-    ketbra_01 = np.tensordot(ket_0, ket_1.T, axes=0)
-    ketbra_10 = np.tensordot(ket_1, ket_0.T, axes=0)
-    sigmaX = ketbra_01 - ketbra_10
-    return tf.convert_to_tensor(sigmaX, dtype=COMPLEX)
-
-
-def create_sigmaY(dim: int = 2, ind: int = 0) -> TENSOR:
-    assert (ind == 0, "WIP")
-    ket_0 = np.zeros(dim, dtype=np.complex128)
-    ket_0[0] = 1
-    ket_1 = np.zeros(dim, dtype=np.complex128)
-    ket_1[1] = 1
-    ketbra_01 = np.tensordot(ket_0, ket_1.T, axes=0)
-    ketbra_10 = np.tensordot(ket_1, ket_0.T, axes=0)
-    sigmaY = ketbra_01 * 1j - ketbra_10 * 1j
-    return tf.convert_to_tensor(sigmaY, dtype=COMPLEX)
-
-
-def create_sigmaZ(dim: int = 2, ind: int = 0) -> TENSOR:
-    assert (ind == 0, "WIP")
-    ket_0 = np.zeros(dim, dtype=np.complex128)
-    ket_0[0] = 1
-    ket_1 = np.zeros(dim, dtype=np.complex128)
-    ket_1[1] = 1
-    ketbra_00 = np.tensordot(ket_0, ket_0.T, axes=0)
-    ketbra_11 = np.tensordot(ket_1, ket_1.T, axes=0)
-    sigmaZ = ketbra_00 - ketbra_11
-    return tf.convert_to_tensor(sigmaZ, dtype=COMPLEX)
-
-
-# E = tf.eye(2, dtype=COMPLEX)
-# E_channel = c_util.convert_1qmatrix_to_channel(E)
-
-
 @tf.function
 def create_1q_depol_matrix(p: TENSOR, dim: int = 2) -> TENSOR:
     """
@@ -104,14 +63,24 @@ def create_2q_depol_matrix(p: TENSOR, dim: int = 2):
     E_channel = c_util.convert_1qmatrix_to_channel(E)
     big_e_channel = util.kron(E_channel, E_channel)
     depol = big_e_channel * (1 - p)
-    sigmaX = create_sigmaX(1, 1)
-    sigmaY = create_sigmaY(1, 1)
-    sigmaZ = create_sigmaZ(1, 1)
-    for m1 in [sigmaX, sigmaY, sigmaZ, E]:
-        for m2 in [sigmaX, sigmaY, sigmaZ, E]:
+
+    X = create_X(dim)
+    Z = create_Z(dim)
+
+    all_XZ = []
+    temp_z = np.eye(dim, dtype=np.complex128)
+    for i in range(dim):
+        temp_x = np.eye(dim, dtype=np.complex128)
+        for j in range(dim):
+            all_XZ.append(temp_x @ temp_z)
+            temp_x = temp_x @ X
+        temp_z = temp_z @ Z
+
+    for m1 in all_XZ:
+        for m2 in all_XZ:
             m = np.kron(m1, m2)
-            m = util.swap_legs(tf.reshape(m, (2, 2, 2, 2)))
-            depol += c_util.convert_2qmatrix_to_channel(m) * p * 0.0625  # 1/16
+            m = util.swap_legs(tf.reshape(m, (dim, dim, dim, dim)))
+            depol += c_util.convert_2qmatrix_to_channel(m) * p * (1 / dim**4)
     return depol
 
 
@@ -180,7 +149,7 @@ def make_1q_hybrid_channel(target: TENSOR, args_list: TENSOR, dim: int = 2) -> T
 
 
 @tf.function
-def make_2q_hybrid_channel(target: TENSOR, args_list: TENSOR) -> TENSOR:
+def make_2q_hybrid_channel(target: TENSOR, args_list: TENSOR, dim: int = 2) -> TENSOR:
     """
     Args:
         target: a Tensor(4,4)[complex128] - a channel, which we are noising now will be applied
@@ -193,16 +162,16 @@ def make_2q_hybrid_channel(target: TENSOR, args_list: TENSOR) -> TENSOR:
     gamma1 = args_list[1] / 2
     gamma2 = args_list[2] / 2
 
-    ap_channel = create_AP_matrix(gamma1, gamma2)
-    ap_channel_2q = util.kron(ap_channel, ap_channel)
+    ap_channel = create_AP_matrix(gamma1, gamma2, dim)
+    ap_channel_2q = util.kron(ap_channel, ap_channel, dim)
 
-    dp_channel = create_1q_depol_matrix(p)
-    dp_channel_2q = util.kron(dp_channel, dp_channel)
+    dp_channel = create_1q_depol_matrix(p, dim)
+    dp_channel_2q = util.kron(dp_channel, dp_channel, dim)
 
     # TODO: check correctness
-    reshaped_target = tf.reshape(target, (16, 16))
+    reshaped_target = tf.reshape(target, (dim**4, dim**4))
     output = ap_channel_2q @ dp_channel_2q @ reshaped_target @ ap_channel_2q
-    output = tf.reshape(output, (4, 4, 4, 4))
+    output = tf.reshape(output, (dim**2, dim**2, dim**2, dim**2))
 
     return output
 
@@ -276,27 +245,27 @@ def create_1q_dispersed_channel(target: TENSOR, sigma: float, dim: int = 2) -> T
     new_eigenvals = _pseudokron_eigs(lambds)
     middle_matrix = tf.linalg.diag(_dispersed_eigs(new_eigenvals, sigma))
 
-    left_matrix = util.kron(eigenvecs, tf.math.conj(eigenvecs))
+    left_matrix = util.kron(eigenvecs, tf.math.conj(eigenvecs), dim)
 
-    right_matrix = util.kron(tf.linalg.adjoint(eigenvecs), tf.transpose(eigenvecs))
+    right_matrix = util.kron(tf.linalg.adjoint(eigenvecs), tf.transpose(eigenvecs), dim)
 
     return left_matrix @ middle_matrix @ right_matrix
 
 
 @tf.function
-def create_2q_dispersed_channel(target: TENSOR, sigma: float) -> TENSOR:
+def create_2q_dispersed_channel(target: TENSOR, sigma: float, dim: int = 2) -> TENSOR:
     """
     TODO: Write docstring
     """
-    basic_gate = nearest_kron_product(util.convert_2q_to16x16(target), 2)
+    basic_gate = nearest_kron_product(util.convert_2q_to16x16(target), dim)
 
     eigenvals, eigenvecs = tf.linalg.eig(basic_gate)
     lambds = tf.math.log(eigenvals) * -1j
     new_eigenvals = _pseudokron_eigs(lambds)
     middle_matrix = tf.linalg.diag(_dispersed_eigs(new_eigenvals, sigma))
 
-    left_matrix = util.kron(eigenvecs, tf.math.conj(eigenvecs))
-    right_matrix = util.kron(tf.linalg.adjoint(eigenvecs), tf.transpose(eigenvecs))
+    left_matrix = util.kron(eigenvecs, tf.math.conj(eigenvecs), dim)
+    right_matrix = util.kron(tf.linalg.adjoint(eigenvecs), tf.transpose(eigenvecs), dim)
     wrong_shaped_matrix = left_matrix @ middle_matrix @ right_matrix
     good_matrix = util.convert_2q_from16x16(wrong_shaped_matrix)
 
@@ -319,13 +288,13 @@ def make_1q_4pars_channel(target: TENSOR, args_list: list[float], dim: int = 2) 
 
 
 @tf.function
-def make_2q_4pars_channel(target: TENSOR, args_list: list[float], dim: int = 2, ind: int = 0) -> TENSOR:
+def make_2q_4pars_channel(target: TENSOR, args_list: list[float], dim: int = 2) -> TENSOR:
     """
     TODO: Write docstring
     """
     # assert (len(args_list) == 4)
     # p_dep, gamma1, gamma2, sigma = args_list
-    disp_channel = create_2q_dispersed_channel(target, args_list[0])
-    output = make_2q_hybrid_channel(disp_channel, args_list[1:])
+    disp_channel = create_2q_dispersed_channel(target, args_list[0], dim)
+    output = make_2q_hybrid_channel(disp_channel, args_list[1:], dim)
 
     return output
