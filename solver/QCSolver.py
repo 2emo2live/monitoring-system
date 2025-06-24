@@ -295,7 +295,7 @@ class QGOptSolver(BaseSolver):
                 params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel, self.dim))
                 self.estimated_gates_dict[name] = tf.Variable(tf.concat([params[tf.newaxis]] * self.n, axis=0))
             elif name in self.two_qud_gates_names:
-                noised_channel = ns.make_2q_hybrid_channel(pure_channels_set[name], init_noise)
+                noised_channel = ns.make_2q_hybrid_channel(pure_channels_set[name], init_noise, self.dim)
                 params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel, self.dim))
                 self.estimated_gates_dict[name] = tf.Variable(tf.concat([params[tf.newaxis]] *
                                                                         (self.n * (self.n - 1)), axis=0))
@@ -641,15 +641,15 @@ class QGOptSolverDebug(QGOptSolver):
                                    self.pure_channels_set[gate_name], self.dim)
                         fids_dict[(gate_name, gate_id, 'i')].append(fid)
 
-                for gate_name in self.two_qud_gates_names:
+                '''for gate_name in self.two_qud_gates_names:
                     for gate_id in range(self.n * (self.n - 1)):
                         fid = util.diamond_norm_2q(channels_dict[gate_name][gate_id],
-                                                   self.hidden_gates_dict[gate_name][gate_id])
+                                                   self.hidden_gates_dict[gate_name][gate_id], self.dim)
                         fids_dict[(gate_name, gate_id, 't')].append(fid)
 
                         fid = util.diamond_norm_2q(channels_dict[gate_name][gate_id],
-                                                   self.pure_channels_set[gate_name])
-                        fids_dict[(gate_name, gate_id, 'i')].append(fid)
+                                                   self.pure_channels_set[gate_name], self.dim)
+                        fids_dict[(gate_name, gate_id, 'i')].append(fid)'''
 
             opt.apply_gradients(zip(grad.values(), self.estimated_gates_dict.values()))
 

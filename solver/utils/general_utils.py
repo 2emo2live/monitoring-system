@@ -213,10 +213,10 @@ def fidel_calc_2q(channel1: tf.Tensor, channel2: tf.Tensor, dim: int = 2) -> tf.
     """
     Calculates fidelity between two arbitrary ncon 2-qubit channels represented as Tensors(4,4,4,4)[complex128]
     """
-    choi1 = choi_swap_2qchannel(channel1) / tf.constant(dim**2, COMPLEX)
+    choi1 = choi_swap_2qchannel(channel1, dim) / tf.constant(dim**2, COMPLEX)
     sqrt_choi1 = scipy.linalg.sqrtm(choi1)
 
-    choi2 = choi_swap_2qchannel(channel2) / tf.constant(dim**2, COMPLEX)
+    choi2 = choi_swap_2qchannel(channel2, dim) / tf.constant(dim**2, COMPLEX)
 
     sqrt_matrix = scipy.linalg.sqrtm(sqrt_choi1 @ choi2 @ sqrt_choi1)
     sqrt_matrix = sqrt_matrix.astype(numpy.complex128)
@@ -317,14 +317,14 @@ def choi_1qchannel_forqiskit(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
     return channel
 
 
-def choi_2qchannel_forqiskit(channel: tf.Tensor) -> tf.Tensor:
+def choi_2qchannel_forqiskit(channel: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Converts a ncon Tensor(4,4,4,4) representing 2qubit channel to Tensor(16,16) in Choi matrix representation.
     Meaningful partial trace is over 1st subsystem now.
     """
-    channel = tf.reshape(channel, (2, 2, 2, 2, 2, 2, 2, 2))
+    channel = tf.reshape(channel, (dim, dim, dim, dim, dim, dim, dim, dim))
     channel = tf.transpose(channel, (4, 6, 0, 2, 5, 7, 1, 3))
-    channel = tf.reshape(channel, (16, 16))
+    channel = tf.reshape(channel, (dim**4, dim**4))
     return channel
 
 
@@ -337,10 +337,10 @@ def diamond_norm_1q(channel1: tf.Tensor, channel2: tf.Tensor, dim: int = 2) -> t
     return tf.convert_to_tensor(diamond_norm(diff_qiskit))
 
 
-def diamond_norm_2q(channel1: tf.Tensor, channel2: tf.Tensor) -> tf.Tensor:
+def diamond_norm_2q(channel1: tf.Tensor, channel2: tf.Tensor, dim: int = 2) -> tf.Tensor:
     """
     Calculates POVM distance between two single-qubit quantum channels.
     """
-    diff = choi_2qchannel_forqiskit(channel1) - choi_2qchannel_forqiskit(channel2)
+    diff = choi_2qchannel_forqiskit(channel1, dim) - choi_2qchannel_forqiskit(channel2, dim)
     diff_qiskit = Choi(diff.numpy())
     return tf.convert_to_tensor(diamond_norm(diff_qiskit))

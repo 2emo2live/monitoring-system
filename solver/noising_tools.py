@@ -160,13 +160,12 @@ def make_2q_hybrid_channel(target: TENSOR, args_list: TENSOR, dim: int = 2) -> T
     """
     p = tf.cast(args_list[0], COMPLEX)
     gamma1 = args_list[1] / 2
-    gamma2 = args_list[2] / 2
 
-    ap_channel = create_AP_matrix(gamma1, gamma2, dim)
-    ap_channel_2q = util.kron(ap_channel, ap_channel, dim)
+    ap_channel = create_AP_matrix(gamma1, dim)
+    ap_channel_2q = util.kron(ap_channel, ap_channel)
 
     dp_channel = create_1q_depol_matrix(p, dim)
-    dp_channel_2q = util.kron(dp_channel, dp_channel, dim)
+    dp_channel_2q = util.kron(dp_channel, dp_channel)
 
     # TODO: check correctness
     reshaped_target = tf.reshape(target, (dim**4, dim**4))
@@ -257,17 +256,17 @@ def create_2q_dispersed_channel(target: TENSOR, sigma: float, dim: int = 2) -> T
     """
     TODO: Write docstring
     """
-    basic_gate = nearest_kron_product(util.convert_2q_to16x16(target), dim)
+    basic_gate = nearest_kron_product(util.convert_2q_to16x16(target, dim), 2, dim)
 
     eigenvals, eigenvecs = tf.linalg.eig(basic_gate)
     lambds = tf.math.log(eigenvals) * -1j
     new_eigenvals = _pseudokron_eigs(lambds)
     middle_matrix = tf.linalg.diag(_dispersed_eigs(new_eigenvals, sigma))
 
-    left_matrix = util.kron(eigenvecs, tf.math.conj(eigenvecs), dim)
-    right_matrix = util.kron(tf.linalg.adjoint(eigenvecs), tf.transpose(eigenvecs), dim)
+    left_matrix = util.kron(eigenvecs, tf.math.conj(eigenvecs))
+    right_matrix = util.kron(tf.linalg.adjoint(eigenvecs), tf.transpose(eigenvecs))
     wrong_shaped_matrix = left_matrix @ middle_matrix @ right_matrix
-    good_matrix = util.convert_2q_from16x16(wrong_shaped_matrix)
+    good_matrix = util.convert_2q_from16x16(wrong_shaped_matrix, dim)
 
     return good_matrix
 
