@@ -162,7 +162,8 @@ def transform_struc_to_ncon(circ_array: list[list[str]], n_qubits: int) -> list[
             # Two-qubit case
             elif len(gate_info) == 3:
                 qubits = [int(gate_info[1]), int(gate_info[2])]
-                net_struc.append([counter + 1, counter, curr_legs[qubits[1]], curr_legs[qubits[0]]])
+                #net_struc.append([counter + 1, counter, curr_legs[qubits[1]], curr_legs[qubits[0]]])
+                net_struc.append([counter, counter+1, curr_legs[qubits[0]], curr_legs[qubits[1]]])
                 curr_legs[qubits[0]] = counter
                 curr_legs[qubits[1]] = counter + 1
                 counter += 2
