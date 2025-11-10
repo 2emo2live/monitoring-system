@@ -19,42 +19,50 @@ def create_Z(dim: int = 2, pow: int = 1):
     return tf.constant(Z, dtype=COMPLEX)
 
 
-def create_X(dim: int = 2):
-    X = np.eye(dim - 1, dtype=np.complex128)
-    X = np.concatenate([X, np.zeros((dim - 1, 1), dtype=np.complex128)], axis=1)
-    new_row = np.zeros((1, dim), dtype=np.complex128)
-    new_row[0][-1] = 1
-    X = np.concatenate([X, new_row], axis=0)
+'''def create_X(dim: int = 2):
+    X = np.zeros((dim, dim), dtype=np.complex128)
+    for i in range(dim):
+        X[i][(i + 1) % dim] = 1
+    return tf.constant(X, dtype=COMPLEX)'''
 
-    return X
+
+def create_X(dim: int = 2, pow: int = 1):
+    X = np.zeros((dim, dim), dtype=np.complex128)
+    for i in range(dim):
+        X[i][(i + pow) % dim] = 1
+    return tf.constant(X, dtype=COMPLEX)
 
 
 @tf.function
 def create_1q_depol_matrix(p: TENSOR, dim: int = 2) -> TENSOR:
     """
-    Creates a Tensor(4, 4)[complex128] describing a 1-qubit depolarizing quantum channel
+    Creates a Tensor(4, 4)[complex128] describing a 1-qudit depolarizing quantum channel
     """
     E = tf.eye(dim, dtype=COMPLEX)
-    e1_channel = c_util.convert_1qmatrix_to_channel((1 - p) * E)
-    Z = create_Z(dim)
-    X = create_X(dim)
-    e2 = np.zeros((dim, dim), dtype=np.complex128)
-    temp_z = np.eye(dim, dtype=np.complex128)
-    for i in range(dim):
-        temp_x = np.eye(dim, dtype=np.complex128)
-        for j in range(dim):
-            if (i == 0) and (j == 0):
-                continue
-            e2 += temp_x @ temp_z
-            temp_x = temp_x @ X
-        temp_z = temp_z @ Z
-    e2 *= tf.math.sqrt(p / (dim * dim - 1))
-    e2_channel = c_util.convert_1qmatrix_to_channel(tf.convert_to_tensor(e2))
+    E_channel = c_util.convert_1qmatrix_to_channel(E)
 
-    return e1_channel + e2_channel
+    pauli_basis = []
+    for a in range(dim):
+        for b in range(dim):
+            X_a = create_X(dim, a)
+            Z_b = create_Z(dim, b)
+            #phase = np.exp(1j * np.pi * a * b / dim)
+            #pauli = tf.cast(phase, COMPLEX) * (X_a @ Z_b)
+            pauli = (X_a @ Z_b)
+            pauli_basis.append(pauli)
+
+    num_paulis = dim * dim
+
+    depol = E_channel * (1 - p)
+
+    for pauli in pauli_basis:
+        pauli_channel = c_util.convert_1qmatrix_to_channel(pauli)
+        depol += pauli_channel * (p / tf.cast(num_paulis, COMPLEX))
+
+    return depol
 
 
-@tf.function
+'''@tf.function
 def create_2q_depol_matrix(p: TENSOR, dim: int = 2):
     """
     Creates a Tensor(4, 4)[complex128] describing a 2-qubit depolarizing quantum channel
@@ -64,32 +72,28 @@ def create_2q_depol_matrix(p: TENSOR, dim: int = 2):
     big_e_channel = util.kron(E_channel, E_channel)
     depol = big_e_channel * (1 - p)
 
-    X = create_X(dim)
-    Z = create_Z(dim)
+    pauli_basis = []
+    for a in range(dim):
+        for b in range(dim):
+            X_a = create_X(dim, a)
+            Z_b = create_Z(dim, b)
+            pauli = (X_a @ Z_b)
+            pauli_basis.append(pauli)
 
-    all_XZ = []
-    temp_z = np.eye(dim, dtype=np.complex128)
-    for i in range(dim):
-        temp_x = np.eye(dim, dtype=np.complex128)
-        for j in range(dim):
-            all_XZ.append(temp_x @ temp_z)
-            temp_x = temp_x @ X
-        temp_z = temp_z @ Z
-
-    for m1 in all_XZ:
-        for m2 in all_XZ:
+    for m1 in pauli_basis:
+        for m2 in pauli_basis:
             m = np.kron(m1, m2)
             m = util.swap_legs(tf.reshape(m, (dim, dim, dim, dim)))
             depol += c_util.convert_2qmatrix_to_channel(m) * p * (1 / dim**4)
-    return depol
+    return depol'''
 
 
-@tf.function
-def create_AP_matrix(gamma1: TENSOR, dim: int = 2):
+#@tf.function
+def create_AP_matrix(gamma1: TENSOR, gamma2: TENSOR, dim: int = 2):
     """
     Args:
         gamma1: Tensor()[float] - parameter for amplitude damping
-        gamma2: Tensor()[float] - parameter for amplitude damping
+        gamma2: Tensor()[float] - parameter for phase damping
 
     Returns:
         Tensor(4, 4)[complex128] describing a 1-qudit amplitude damping & phase damping quantum channel
@@ -98,6 +102,9 @@ def create_AP_matrix(gamma1: TENSOR, dim: int = 2):
     for i in range(dim):
         ad_kraus = create_ad_single_kraus(i, gamma1, dim=dim)
         channel += c_util.convert_1qmatrix_to_channel(ad_kraus)
+
+    pd_channel = create_pd_channel(gamma2, dim)
+    channel = channel @ pd_channel
 
     return channel
 
@@ -138,12 +145,14 @@ def make_1q_hybrid_channel(target: TENSOR, args_list: TENSOR, dim: int = 2) -> T
         Tensor(4,4)[complex128] - new noised channel
     """
     p = tf.cast(args_list[0], COMPLEX)
-    gamma = args_list[1] / 2
-    ap_channel = create_AP_matrix(gamma, dim)
+    gamma1 = args_list[1] / 2
+    gamma2 = args_list[2] / 2
+    ap_channel = create_AP_matrix(gamma1, gamma2, dim)
     dp_channel = create_1q_depol_matrix(p, dim)
 
     # TODO: check correctness
-    output = ap_channel @ dp_channel @ target @ ap_channel
+    output = dp_channel @ target
+    output = ap_channel @ output @ ap_channel
 
     return output
 
@@ -160,8 +169,9 @@ def make_2q_hybrid_channel(target: TENSOR, args_list: TENSOR, dim: int = 2) -> T
     """
     p = tf.cast(args_list[0], COMPLEX)
     gamma1 = args_list[1] / 2
+    gamma2 = args_list[2] / 2
 
-    ap_channel = create_AP_matrix(gamma1, dim)
+    ap_channel = create_AP_matrix(gamma1, gamma2, dim)
     ap_channel_2q = util.kron(ap_channel, ap_channel)
 
     dp_channel = create_1q_depol_matrix(p, dim)
@@ -229,7 +239,7 @@ def _dispersed_eigs(lambds: TENSOR, sigma: float) -> TENSOR:
     return tf.math.exp(1j * lambds - lambds ** 2 * sigma ** 2 / 2)
 
 
-@tf.function
+'''@tf.function
 def create_1q_dispersed_channel(target: TENSOR, sigma: float, dim: int = 2) -> TENSOR:
     """
     TODO: Write docstring
@@ -268,7 +278,7 @@ def create_2q_dispersed_channel(target: TENSOR, sigma: float, dim: int = 2) -> T
     wrong_shaped_matrix = left_matrix @ middle_matrix @ right_matrix
     good_matrix = util.convert_2q_from16x16(wrong_shaped_matrix, dim)
 
-    return good_matrix
+    return good_matrix'''
 
 
 @tf.function
@@ -293,7 +303,8 @@ def make_2q_4pars_channel(target: TENSOR, args_list: list[float], dim: int = 2) 
     """
     # assert (len(args_list) == 4)
     # p_dep, gamma1, gamma2, sigma = args_list
-    disp_channel = create_2q_dispersed_channel(target, args_list[0], dim)
-    output = make_2q_hybrid_channel(disp_channel, args_list[1:], dim)
+    # disp_channel = create_2q_dispersed_channel(target, args_list[0], dim)
+    # output = make_2q_hybrid_channel(disp_channel, args_list[1:], dim)
+    output = make_2q_hybrid_channel(target, args_list, dim)
 
     return output
