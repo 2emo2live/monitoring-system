@@ -128,10 +128,36 @@ def test_depol_channel():
         rho_in_vec = tf.reshape(rho1, [-1, 1])
         rho_out_vec = channel @ rho_in_vec
         rho_out = tf.reshape(rho_out_vec, [d, d])
-
-        # Expected output: maximally mixed state I/d
         expected_rho_out = tf.eye(d, dtype=COMPLEX) / tf.cast(d, COMPLEX)
         assert same_matrix(rho_out, expected_rho_out)
+    for d in [2, 3, 4]:
+        for p in [0.25, 0.5, 0.7]:
+            channel = ns.create_1q_depol_matrix(p, dim=d)
+            states = [
+                # Basis state |0⟩⟨0|
+                tf.constant(np.diag([1] + [0] * (d - 1)), dtype=COMPLEX),
+                # Basis state |1⟩⟨1| (if dim > 1)
+                tf.constant(np.diag([0, 1] + [0] * (d - 2)), dtype=COMPLEX),
+                # Maximally mixed state
+                tf.eye(d, dtype=COMPLEX) / tf.cast(d, COMPLEX),
+                # Coherent superposition
+                tf.constant(np.ones((d, d), dtype=np.complex128) / d, dtype=COMPLEX)
+            ]
+
+            for rho in states:
+                # Apply channel and check trace
+                rho_vec = tf.reshape(rho, [-1, 1])
+                rho_out_vec = channel @ rho_vec
+                rho_out = tf.reshape(rho_out_vec, (d, d))
+
+                trace_in = tf.linalg.trace(rho)
+                trace_out = tf.linalg.trace(rho_out)
+
+                assert abs(trace_in - trace_out) < 1e-10, (
+                    f"Trace not preserved: dim={d}, p={p}, "
+                    f"trace_in={trace_in.numpy()}, trace_out={trace_out.numpy()}"
+                )
+
 
 
 def test_zero_noise():
@@ -243,7 +269,7 @@ def test_2q_channel_noise_params(noise_list: list[int]):
     (ns.make_1q_4pars_channel, ns.make_2q_4pars_channel, tf.Variable([0.1, 0.1, 0.1, 0.1]))
 ]'''
 NOISE_GRAD_TESTS = [
-    (ns.make_1q_hybrid_channel, ns.make_2q_hybrid_channel, [0.1, 0.1, 0.1])
+    (ns.make_1q_hybrid_channel, ns.make_2q_hybrid_channel, tf.Variable([0.1, 0.1, 0.1]))
 ]
 #NAMES_GRAD = ['ad/pd/depol', 'gaussian-blur', 'combined']
 NAMES_GRAD = ['ad/pd/depol']

@@ -124,10 +124,10 @@ def create_ad_single_kraus(k: int, gamma: TENSOR, dim: int = 2):
 
 
 def create_pd_channel(gamma: TENSOR, dim: int = 2):
-    p = (dim - 1) / dim * gamma  # phase flip probability
-    channel = c_util.convert_1qmatrix_to_channel(np.sqrt(1 - p) * tf.eye(dim, dtype=COMPLEX))
+    p = tf.cast((dim - 1) / dim * gamma, dtype=COMPLEX)  # phase flip probability
+    channel = c_util.convert_1qmatrix_to_channel(tf.math.sqrt(1 - p) * tf.eye(dim, dtype=COMPLEX))
     for i in range(dim - 1):
-        kraus = np.sqrt(p / (dim - 1)) * create_Z(dim, pow=i + 1)
+        kraus = tf.math.sqrt(p / (dim - 1)) * create_Z(dim, pow=i + 1)
         channel += c_util.convert_1qmatrix_to_channel(kraus)
     return channel
 
