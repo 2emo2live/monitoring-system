@@ -42,11 +42,17 @@ def test_grad_descent_qgo():
                                    two_qubit_gate_prob=0.15,
                                    custom_name='_')
 
-    noise_cfg_test = [
+    '''noise_cfg_test = [
         ('1Q1', 0, ns.make_1q_4pars_channel, 0.1, 0.1, 0.1, 0.05),
         ('1Q1', 2, ns.make_1q_4pars_channel, 0.03, 0.03, 0.03, 0.0),
         ('1Q2', 1, ns.make_1q_4pars_channel, 0.1, 0.05, 0.05, 0.05),
         ('2Q', 1, ns.make_2q_4pars_channel, 0.03, 0.06, 0.06, 0.05)
+    ]'''
+    noise_cfg_test = [
+        ('1Q1', 0, ns.make_1q_4pars_channel, 0.1, 0.1, 0.05, 2),
+        ('1Q1', 2, ns.make_1q_4pars_channel, 0.03, 0.03, 0.0, 2),
+        ('1Q2', 1, ns.make_1q_4pars_channel, 0.1, 0.05, 0.05, 2),
+        ('2Q', 1, ns.make_2q_4pars_channel, 0.03, 0.06, 0.05, 2)
     ]
     exp_test = ExperimentConductor(pure_channels_set=random_pure_channels,
                                    noise_cfg=noise_cfg_test,
@@ -58,7 +64,7 @@ def test_grad_descent_qgo():
                                    iterations=10,
                                    sample_size=10000)
 
-    QC_t = QGOptSolver(qubits_num=n_qubits, single_qub_gates_names={'1Q1', '1Q2'}, two_qub_gates_names={'2Q'},
+    QC_t = QGOptSolver(qudits_num=n_qubits, single_qud_gates_names={'1Q1', '1Q2'}, two_qud_gates_names={'2Q'},
                        pure_channels_set=random_pure_channels, compress_samples=False,
                        noise_params=exp_test.noise_params)
 

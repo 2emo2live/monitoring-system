@@ -124,6 +124,8 @@ class QCEvaluator:
         plug_state = [0] * self.dim**2
         for i in range(0, len(plug_state), self.dim+1):           #TODO: check
             plug_state[i] = 1
+        #plug_state[0] = 1               #TODO: check
+        #plug_state[-1] = 1
 
         plugs = (self.n - qubit_id) * [tf.constant(plug_state, dtype=COMPLEX)]
         out_tensors = out_tensors + plugs
@@ -155,15 +157,21 @@ class QCEvaluator:
         # if psi.shape[0] == 0:
         #     raise ValueError("psi is empty, which indicates an issue with tensor network contraction.")
 
+        indices = tf.range(0, self.dim ** 2, self.dim + 1, dtype=tf.int32)
+
         if prev_samples is not None:
-            big_p = tf.concat([psi[:, i][tf.newaxis] for i in range(0, self.dim**2, self.dim+1)], axis=0)
-            big_p = tf.transpose(big_p)
+            #big_p = tf.concat([psi[:, i][tf.newaxis] for i in range(0, self.dim**2, self.dim+1)], axis=0)
+            big_p = tf.gather(psi, indices, axis=-1)
+            #big_p = tf.transpose(big_p)
+
             big_p = big_p / tf.reduce_sum(big_p, axis=1, keepdims=True)
             log_probs = tf.math.log(big_p)  # Gumbel trick (Ilya is a genius)
             eps = -tf.math.log(-tf.math.log(tf.random.uniform(log_probs.shape, dtype=FLOAT)))
             samples = (tf.argmax(log_probs + eps, axis=-1, output_type=tf.int32))
         else:
-            big_p = tf.concat([psi[i][tf.newaxis] for i in range(0, self.dim**2, self.dim+1)], axis=0)
+            #big_p = tf.concat([psi[i][tf.newaxis] for i in range(0, self.dim**2, self.dim+1)], axis=0)
+            big_p = tf.gather(psi, indices)  # форма (dim,)
+
             big_p = big_p / tf.reduce_sum(big_p, keepdims=True)
             log_probs = tf.math.log(big_p)
             eps = -tf.math.log(-tf.math.log(tf.random.uniform((bs, self.dim), dtype=FLOAT)))
