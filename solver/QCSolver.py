@@ -58,6 +58,7 @@ class BaseSolver:
                  two_qud_gates_names: set[str],
                  pure_channels_set: GateSet,
                  learnable_gates_names: set[str] = None,
+                 tied_gates_names: set[str] = None,
                  dim: int = 2,
                  compress_samples: bool = False,
                  noise_params: NoiseParams = None):
@@ -72,6 +73,11 @@ class BaseSolver:
             self.learnable_gates_names = set(pure_channels_set.keys())
         else:
             self.learnable_gates_names = learnable_gates_names
+
+        if tied_gates_names is None:
+            self.tied_gates_names = set()
+        else:
+            self.tied_gates_names = tied_gates_names
 
         self.ideal_gates_list: list[TENSOR] = []
         for name in pure_channels_set:
@@ -99,10 +105,11 @@ class BaseSolver:
                 self.hidden_gates_dict[name] = tf.concat([pure_channels_set[name][tf.newaxis]] * self.n, axis=0)
             elif name in self.two_qud_gates_names:
                 self.hidden_gates_dict[name] = tf.concat([pure_channels_set[name][tf.newaxis]] *
-                                                         (self.n * (self.n - 1)), axis=0)
+                                                            (self.n * (self.n - 1)), axis=0)
             elif name == ID_GATE:
                 self.hidden_gates_dict[ID_GATE] = pure_channels_set[ID_GATE][tf.newaxis]
             else:
+                print(name)
                 raise ValueError('Gate was not specified during __init__')  # TODO: custom exception
 
         if params is None:
@@ -129,11 +136,24 @@ class BaseSolver:
             if old_tensor_id == e_id:
                 new_tensors[idx] = len(self.single_qud_gates_names)
             elif old_tensor_id < e_id:
-                new_tensors[idx] = old_tensor_id // self.n
+                # Single-qubit gates
+                gate_idx = old_tensor_id // self.n
+                new_tensors[idx] = gate_idx
+                #gate_name = self.single_qud_gates_names[gate_idx]
+                #if gate_name in self.tied_gates_names:
+                    #new_tensors[idx] = gate_idx  # TODO: check tied idx
+                #else:
+                    #new_tensors[idx] = gate_idx
             else:
+                # Two-qubit gates
                 shifted = old_tensor_id - e_id - 1
-                new_tensors[idx] = shifted // (self.n * (self.n - 1))
-                new_tensors[idx] += len(self.single_qud_gates_names) + 1
+                gate_idx = shifted // (self.n * (self.n - 1))
+                new_tensors[idx] = len(self.single_qud_gates_names) + 1 + gate_idx
+                #gate_name = self.two_qud_gates_names[gate_idx]
+                #if gate_name in self.tied_gates_names:
+                    #new_tensors[idx] = len(self.single_qud_gates_names) + 1 + gate_idx  # TODO: check tied idx
+                #else:
+                    #new_tensors[idx] = len(self.single_qud_gates_names) + 1 + gate_idx
 
         new_template = [new_tensors, net_struc, con_order, out_order]
         return new_template
@@ -262,9 +282,18 @@ class QGOptSolver(BaseSolver):
                  compress_samples: bool = False,
                  noise_params: NoiseParams = None,
                  initial_estimated_gates_override: tp.Optional[dict[str, tf.Variable]] = None,
-                 noise_iter0: float = 0.0):
+                 noise_iter0: float = 0.0,
+                 tied_gates_names: tp.Optional[set[str]] = None):
         super().__init__(qudits_num, single_qud_gates_names, two_qud_gates_names, pure_channels_set,
-                         learnable_gates_names, dim, compress_samples, noise_params)
+                         learnable_gates_names, tied_gates_names, dim, compress_samples, noise_params)
+
+        self.tied_gates_names = set(tied_gates_names or ())
+        unknown_tied = self.tied_gates_names - set(pure_channels_set)
+        if unknown_tied:
+            raise ValueError(f"Unknown tied gates: {unknown_tied}")
+        nonlearnable_tied = self.tied_gates_names - self.learnable_gates_names
+        if nonlearnable_tied:
+            raise ValueError(f"Tied gates must be learnable: {nonlearnable_tied}")
 
         if initial_estimated_gates_override is not None:
             self._run_sanity_checks_for_checkpoint(pure_channels_set, initial_estimated_gates_override)
@@ -274,7 +303,7 @@ class QGOptSolver(BaseSolver):
             self.estimated_gates_dict: dict[str, tp.Union[tf.Variable, tf.Tensor]] = {}
             self._init_estimated(pure_channels_set, noise_iter0)
 
-        self.eval_estimated = QCEvaluator(unwrap_dict(get_complex_channel_form(self.estimated_gates_dict, self.dim)), self.n, self.dim)
+        self.eval_estimated = QCEvaluator(unwrap_dict(self._get_estimated_channels()), self.n, self.dim)
         self.timestamps: dict[str, float] = {}
 
     def _run_sanity_checks_for_checkpoint(self,
@@ -284,46 +313,67 @@ class QGOptSolver(BaseSolver):
         if initial_estimated_gates_override.keys() != pure_channels_set.keys():
             raise ValueError("Wrong set of quantum gates")
         for one_qud_key in self.single_qud_gates_names:
-            assert initial_estimated_gates_override[one_qud_key].shape[0] == self.n, \
-                f"Wrong number of noised gates for single-qubit gate {one_qud_key}, must be {self.n}"
+            expected_instances = 1 if one_qud_key in self.tied_gates_names else self.n
+            assert initial_estimated_gates_override[one_qud_key].shape[0] == expected_instances, \
+                f"Wrong number of noised gates for single-qubit gate {one_qud_key}, must be {expected_instances}"
             assert initial_estimated_gates_override[one_qud_key].shape[1:] == pure_channels_set[one_qud_key].shape[1:], \
                 f"Wrong shape of passed gates with label {one_qud_key}, must be {(pure_channels_set[one_qud_key].shape[1:])}"
         for two_qud_key in self.two_qud_gates_names:
-            assert initial_estimated_gates_override[two_qud_key].shape[0] == self.n * (self.n - 1), \
+            expected_instances = 1 if two_qud_key in self.tied_gates_names else self.n * (self.n - 1)
+            assert initial_estimated_gates_override[two_qud_key].shape[0] == expected_instances, \
                 f"Wrong number of noised gates for two-qubit gate {two_qud_key}," \
-                f" must be {self.n * (self.n - 1)}"
+                f" must be {expected_instances}"
             assert initial_estimated_gates_override[two_qud_key].shape[1:] == (pure_channels_set[two_qud_key].shape[1:]), \
                 f"Wrong shape of passed gates with label {two_qud_key}, must be {(pure_channels_set[two_qud_key].shape[1:])}"
 
     def _init_estimated(self, pure_channels_set: GateSet, noise_iter0: float = 0.0) -> None:
         init_noise = tf.convert_to_tensor([noise_iter0, 0.0, 0.0], dtype=FLOAT) #TODO: check number of noise params
         for name in pure_channels_set:
+            # Single-qubit gates
             if name in self.single_qud_gates_names:
+                num_instances = 1 if name in self.tied_gates_names else self.n
                 if name in self.learnable_gates_names:
                     noised_channel = ns.make_1q_hybrid_channel(pure_channels_set[name], init_noise, self.dim)
                     params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel, self.dim))
-                    self.estimated_gates_dict[name] = tf.Variable(tf.concat([params[tf.newaxis]] * self.n, axis=0))
+                    self.estimated_gates_dict[name] = tf.Variable(tf.concat([params[tf.newaxis]] * num_instances, axis=0),
+                                                                    name=name)
                 else:
                     params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(pure_channels_set[name], self.dim))
-                    self.estimated_gates_dict[name] = tf.constant(tf.concat([params[tf.newaxis]] * self.n, axis=0))
+                    self.estimated_gates_dict[name] = tf.constant(tf.concat([params[tf.newaxis]] * num_instances, axis=0))
+            # Two-qubit gates
             elif name in self.two_qud_gates_names:
+                num_instances = 1 if name in self.tied_gates_names else self.n * (self.n - 1)
                 if name in self.learnable_gates_names:
                     noised_channel = ns.make_2q_hybrid_channel(pure_channels_set[name], init_noise, self.dim)
                     params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(noised_channel, self.dim))
-                    self.estimated_gates_dict[name] = tf.Variable(tf.concat([params[tf.newaxis]] *
-                                                                            (self.n * (self.n - 1)), axis=0))
+                    self.estimated_gates_dict[name] = tf.Variable(tf.concat([params[tf.newaxis]] * num_instances, axis=0),
+                                                                    name=name)
                 else:
                     params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(pure_channels_set[name], self.dim))
-                    self.estimated_gates_dict[name] = tf.constant(tf.concat([params[tf.newaxis]] *
-                                                                            (self.n * (self.n - 1)), axis=0))
+                    self.estimated_gates_dict[name] = tf.constant(tf.concat([params[tf.newaxis]] * num_instances, axis=0))
             elif name == ID_GATE:
                 params = qgo.manifolds.complex_to_real(c_util.convert_channel_to_params(pure_channels_set[ID_GATE], self.dim))
-                self.estimated_gates_dict[ID_GATE] = tf.Variable(params[tf.newaxis])
+                self.estimated_gates_dict[ID_GATE] = tf.Variable(params[tf.newaxis], name=name)
             else:
-                raise ValueError('Gate was not specified during __init__')  # TODO: custom exception
+                raise ValueError('Gate was not specified during __init__')  # TODO: custom exception      
 
         print(f"Estimated set is generated from pure channels by applying noise parameters {init_noise}")
         print(f"Learnable gates: {self.learnable_gates_names}")
+        print(f"Tied gates: {self.tied_gates_names}")
+
+    def _get_estimated_channels(self) -> GateSet:
+        """Return physical channels, expanding tied parameters at evaluation time.
+
+        Tensor-network templates address a separate channel slot for every qudit
+        (or ordered qudit pair). A tied gate owns one Choi parameter tensor, so
+        its converted channel is repeated here rather than independently learned.
+        Gradients through ``tf.repeat`` accumulate into that one tensor.
+        """
+        channels = get_complex_channel_form(self.estimated_gates_dict, self.dim)
+        for name in self.tied_gates_names:
+            copies = self.n if name in self.single_qud_gates_names else self.n * (self.n - 1)
+            channels[name] = tf.repeat(channels[name], repeats=copies, axis=0)
+        return channels
 
     # ---------------------------------------------------------------------------------------------------
 
@@ -342,7 +392,7 @@ class QGOptSolver(BaseSolver):
                 if isinstance(self.estimated_gates_dict[name], tf.Variable):
                     tape.watch(self.estimated_gates_dict[name])
 
-            channels_dict = get_complex_channel_form(self.estimated_gates_dict, self.dim)
+            channels_dict = self._get_estimated_channels()
             # The estimated_set consists of several (default - four) tf.Variables. They get unwrapped in a 1D array
             # and then they get passed into 'eval_estimated'
             self.eval_estimated.gates = unwrap_dict(channels_dict)
@@ -397,7 +447,7 @@ class QGOptSolver(BaseSolver):
                     tape.watch(self.estimated_gates_dict[name])
 
             # same as loss and grad but with some time checks and exp
-            channels_dict = get_complex_channel_form(self.estimated_gates_dict, self.dim)
+            channels_dict = self._get_estimated_channels()
             self.eval_estimated.gates = unwrap_dict(channels_dict)
 
             dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
@@ -634,6 +684,7 @@ class QGOptSolverDebug(QGOptSolver):
                  two_qud_gates_names: set[str],
                  pure_channels_set: GateSet,
                  learnable_gates_names:  set[str] = None,
+                 tied_gates_names: set[str] = None,
                  dim: int = 2,
                  compress_samples: bool = False,
                  noise_params: NoiseParams = None,
@@ -644,6 +695,7 @@ class QGOptSolverDebug(QGOptSolver):
                          two_qud_gates_names=two_qud_gates_names,
                          pure_channels_set=pure_channels_set,
                          learnable_gates_names=learnable_gates_names,
+                         tied_gates_names=tied_gates_names,
                          dim=dim,
                          compress_samples=compress_samples,
                          noise_params=noise_params,
@@ -677,7 +729,8 @@ class QGOptSolverDebug(QGOptSolver):
 
             if v >= 3:
                 for gate in grad.keys():
-                    print(gate, ": ", grad[gate].numpy().mean())
+                    if tf.is_tensor(grad[gate]):
+                        print(gate, ": ", grad[gate].numpy().mean())
 
             if v == 1:
                 if (iteration % step_print) == 0:
@@ -686,7 +739,7 @@ class QGOptSolverDebug(QGOptSolver):
             loss_dynamics.append(loss)
 
             if fid_ctr > 0 and iteration % fid_ctr == 0:
-                channels_dict = get_complex_channel_form(self.estimated_gates_dict, self.dim)
+                channels_dict = self._get_estimated_channels()
                 for gate_name in self.single_qud_gates_names:
                     for gate_id in range(self.n):
                         func = FUNCS[gate_name] if gate_name in FUNCS else util.diamond_norm_1q

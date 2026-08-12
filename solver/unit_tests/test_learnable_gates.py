@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import typing as tp
 from scipy.stats import unitary_group
+import pytest
 
 import solver.utils.general_utils as util
 import solver.utils.channel_utils as c_util
@@ -344,3 +345,69 @@ def test_learnable_gate_types_integration():
             l1_pure, l1_true = solver.get_circ_l1_norms(name)
             assert l1_pure.numpy() >= 0, "L1 norm should be non-negative"
             assert l1_true.numpy() >= 0, "L1 norm should be non-negative"
+
+
+def test_tied_gate_single_shared_instance():
+    """Tied gates own one learnable instance, broadcast to all qudit pairs at eval."""
+    for dim in [2, 3]:
+        n_qudits = 2
+        pure_channels = create_test_gates(dim)
+        gen = cg.DataGenerator(
+            qubits_num=n_qudits,
+            gates_names=['U1', 'U2', 'V'],
+            single_qub_gates_num=2,
+            two_qub_gates_num=1,
+        )
+
+        circuits = [['U1_0', 'U2_1', 'V_0_1']]
+        ncon_tmpls = gen.get_tmpl_dict_from_human_circs(circuits)
+
+        solver = QGOptSolver(
+            qudits_num=n_qudits,
+            single_qud_gates_names={'U1', 'U2'},
+            two_qud_gates_names={'V'},
+            pure_channels_set=pure_channels,
+            learnable_gates_names={'V'},
+            tied_gates_names={'V'},
+            dim=dim,
+            noise_iter0=0.1,
+        )
+
+        for name, tmpl in ncon_tmpls.items():
+            solver.add_circuit(tn_template=tmpl, name=name)
+
+        # The tied gate owns exactly one learned instance
+        assert solver.estimated_gates_dict['V'].shape[0] == 1, "tied gate must have a single instance"
+
+        # Non-tied gates keep per-qudit instances
+        assert solver.estimated_gates_dict['U1'].shape[0] == n_qudits
+
+        # At evaluation time the tied channel is expanded to one copy per qudit pair
+        channels = solver._get_estimated_channels()
+        assert channels['V'].shape[0] == n_qudits * (n_qudits - 1)
+        for i in range(1, channels['V'].shape[0]):
+            np.testing.assert_allclose(channels['V'][i].numpy(), channels['V'][0].numpy(),
+                                       rtol=1e-6, atol=1e-6)
+
+        solver.generate_all_samples(smpl_size=400, v=False)
+        loss, grad_dict = solver._loss_and_grad(lmbd1=1.0, lmbd2=1.0)
+
+        # The tied variable receives gradients from all its slots
+        assert grad_dict['V'] is not None, "tied gate should receive gradients"
+        assert np.abs(grad_dict['V'].numpy()).sum() > 0, "tied gate gradient should be non-zero"
+
+
+def test_tied_gate_must_be_learnable():
+    """Tied gates must belong to the learnable set."""
+    dim = 2
+    pure_channels = create_test_gates(dim)
+    with pytest.raises(ValueError, match="Tied gates must be learnable"):
+        QGOptSolver(
+            qudits_num=2,
+            single_qud_gates_names={'U1', 'U2'},
+            two_qud_gates_names={'V'},
+            pure_channels_set=pure_channels,
+            learnable_gates_names={'U1'},
+            tied_gates_names={'V'},
+            dim=dim,
+        )
