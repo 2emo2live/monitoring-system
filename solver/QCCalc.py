@@ -1,3 +1,4 @@
+import copy
 import tensorflow as tf  # tf 2.x
 import tensornetwork as tn
 from tensornetwork import ncon
@@ -52,7 +53,7 @@ class QCEvaluator:
         """
         Adds a circuit to a class attribute. Keep in mind the format!
         """
-        self.circuits[name] = tn_template
+        self.circuits[name] = copy.deepcopy(tn_template)
 
     # TODO: try to insert @tf.function here for speed
     def evaluate(self, samples: tf.Tensor, name: str) -> tf.Tensor:
@@ -70,14 +71,16 @@ class QCEvaluator:
         out_tensors = tf.one_hot(tf.multiply(samples, self.dim+1), self.dim**2, dtype=COMPLEX)
         out_tensors = [out_tensors[:, i, :] for i in range(self.n)]
 
-        tensors, net_struc, con_order, out_order = self.circuits[name]
-        tensors = out_tensors + self.in_states + [self.gates[i] for i in tensors]
+        tensors_ids, net_struc, con_order, out_order = self.circuits[name]
+        # Deep-copy mutable structure to avoid mutating stored template
+        net_struc = copy.deepcopy(net_struc)
+        con_order = list(con_order)
+        tensors = out_tensors + self.in_states + [self.gates[i] for i in tensors_ids]
 
         for i, arr in enumerate(net_struc):
             for j, obj in enumerate(arr):
-                if isinstance(obj, int):
-                    if obj < 0:
-                        net_struc[i][j] = 'out' + str(-net_struc[i][j])  # don't use obj - it's a copy
+                if isinstance(obj, int) and obj < 0:
+                    net_struc[i][j] = 'out' + str(-obj)
 
         net_struc = ([[-1, 'out' + str(i)] for i in range(1, self.n + 1)]
                      + [[i] for i in range(1, self.n + 1)]) + net_struc
@@ -131,14 +134,15 @@ class QCEvaluator:
         out_tensors = out_tensors + plugs
 
         # we unpack a tensor network template, then add slices, add target qubit, add plugs, and finally input legs
-        tensors, net_struc, con_order, out_order = self.circuits[name]
-        tensors = out_tensors + self.in_states + [self.gates[i] for i in tensors]
+        tensors_ids, net_struc, con_order, out_order = self.circuits[name]
+        net_struc = copy.deepcopy(net_struc)
+        con_order = list(con_order)
+        tensors = out_tensors + self.in_states + [self.gates[i] for i in tensors_ids]
 
         for i, arr in enumerate(net_struc):
             for j, obj in enumerate(arr):
-                if isinstance(obj, int):
-                    if obj < 0:
-                        net_struc[i][j] = 'out' + str(-net_struc[i][j])
+                if isinstance(obj, int) and obj < 0:
+                    net_struc[i][j] = 'out' + str(-obj)
 
         net_struc = ([[-1, 'out' + str(i)] for i in range(1, qubit_id)] +
                      [[-2, 'out' + str(qubit_id)]] +

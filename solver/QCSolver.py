@@ -7,6 +7,8 @@ import QGOpt as qgo
 from abc import abstractmethod
 from collections import defaultdict
 
+import copy
+
 import solver.utils.general_utils as util
 import solver.utils.channel_utils as c_util
 import solver.noising_tools as ns
@@ -64,24 +66,26 @@ class BaseSolver:
                  noise_params: NoiseParams = None):
         self.n = qudits_num
         self.dim = dim
-        self.single_qud_gates_names = single_qud_gates_names
-        self.two_qud_gates_names = two_qud_gates_names
+        self.single_qud_gates_names = set(single_qud_gates_names)
+        self.two_qud_gates_names = set(two_qud_gates_names)
         assert len(pure_channels_set) == len(single_qud_gates_names) + len(two_qud_gates_names) + 1
 
         if learnable_gates_names is None:
             # Default: all gates are learnable
             self.learnable_gates_names = set(pure_channels_set.keys())
         else:
-            self.learnable_gates_names = learnable_gates_names
+            self.learnable_gates_names = set(learnable_gates_names)
 
         if tied_gates_names is None:
             self.tied_gates_names = set()
         else:
-            self.tied_gates_names = tied_gates_names
+            self.tied_gates_names = set(tied_gates_names)
 
         self.ideal_gates_list: list[TENSOR] = []
         for name in pure_channels_set:
             self.ideal_gates_list.append(pure_channels_set[name])
+        # Dict for correct regularization (fix P0 index mismatch, also O(1) lookup)
+        self._ideal_gates_dict: GateSet = dict(pure_channels_set)
 
         self.hidden_gates_dict: GateSet = {}
         self._init_hidden_channels(pure_channels_set, noise_params)
@@ -96,6 +100,12 @@ class BaseSolver:
         self.eval_pure = QCEvaluator(self.ideal_gates_list, self.n, self.dim)
         self.eval_hidden = QCEvaluator(unwrap_dict(self.hidden_gates_dict), self.n, self.dim)
         self.eval_estimated = None
+
+        # Cache all_bitstrings (dim**n, n) to avoid recomputation in GradientTape
+        dimdim_cache = tf.constant([self.dim] * self.n, dtype=tf.int64)
+        self._all_bitstrings_cache: tf.Tensor = tf.transpose(
+            tf.unravel_index(np.arange(self.dim ** self.n), dimdim_cache)
+        )
 
     def _init_hidden_channels(self, pure_channels_set: GateSet, params: NoiseParams = None) -> None: # CHECK
         """
@@ -129,7 +139,11 @@ class BaseSolver:
         This conversion changes only tensors IDs, leaving tensor network structure intact.
         """
         tensors, net_struc, con_order, out_order = tmpl
-        new_tensors = tensors.copy()
+        new_tensors = list(tensors)
+        # Deep-copy mutable structure to avoid shared mutation with QCCalc
+        net_struc = copy.deepcopy(net_struc)
+        con_order = list(con_order)
+        out_order = list(out_order)
         e_id = len(self.single_qud_gates_names) * self.n
 
         for idx, old_tensor_id in enumerate(tensors):
@@ -139,29 +153,20 @@ class BaseSolver:
                 # Single-qubit gates
                 gate_idx = old_tensor_id // self.n
                 new_tensors[idx] = gate_idx
-                #gate_name = self.single_qud_gates_names[gate_idx]
-                #if gate_name in self.tied_gates_names:
-                    #new_tensors[idx] = gate_idx  # TODO: check tied idx
-                #else:
-                    #new_tensors[idx] = gate_idx
             else:
                 # Two-qubit gates
                 shifted = old_tensor_id - e_id - 1
                 gate_idx = shifted // (self.n * (self.n - 1))
                 new_tensors[idx] = len(self.single_qud_gates_names) + 1 + gate_idx
-                #gate_name = self.two_qud_gates_names[gate_idx]
-                #if gate_name in self.tied_gates_names:
-                    #new_tensors[idx] = len(self.single_qud_gates_names) + 1 + gate_idx  # TODO: check tied idx
-                #else:
-                    #new_tensors[idx] = len(self.single_qud_gates_names) + 1 + gate_idx
 
         new_template = [new_tensors, net_struc, con_order, out_order]
         return new_template
 
     def add_circuit(self, tn_template: NconTemplate, name: str) -> None:
-        self.tn_templates[name] = tn_template
+        # Store deepcopy to prevent QCCalc in-place mutation leaking to caller
+        self.tn_templates[name] = copy.deepcopy(tn_template)
         self.eval_pure.add_circuit(self._simple_template(tn_template), name)
-        self.eval_hidden.add_circuit(tn_template, name)
+        self.eval_hidden.add_circuit(copy.deepcopy(tn_template), name)
 
     def generate_sample(self, name: str, smpl_size=10000) -> None:
         """
@@ -191,28 +196,27 @@ class BaseSolver:
                 print('25%', end=' ')
         print('Done!')
 
-    @tf.function
     def get_gaussian_reg(self, channels_dict: GateSet, lmbd1: float = 1, lmbd2: float = 1):
         total_reg = tf.constant(0, dtype=FLOAT)
-        for idx, gate_type in enumerate(channels_dict):  # 'S', 'H', etc.
+        for gate_type, chan in channels_dict.items():
             if gate_type == ID_GATE:
-                pass
-            elif gate_type in self.single_qud_gates_names:
-                gate_type_norm = tf.math.abs(tf.linalg.norm(channels_dict[gate_type] -
-                                                            self.ideal_gates_list[idx]) ** 2)
-                total_reg += gate_type_norm * lmbd1
-            else:  # no need to check containment in two_qub_gates: it was done at __init__
-                gate_type_norm = tf.math.abs(tf.linalg.norm(channels_dict[gate_type] -
-                                                            self.ideal_gates_list[idx]) ** 2)
-                total_reg += gate_type_norm * lmbd2
+                continue
+            ideal = self._ideal_gates_dict[gate_type]
+            # chan shape (batch, ...) vs ideal (...,) -> broadcasting, Frobenius norm squared
+            diff = chan - ideal
+            # reduce_sum of squared magnitudes = ||diff||_F^2
+            norm_sq = tf.reduce_sum(tf.square(tf.abs(diff)))
+            if gate_type in self.single_qud_gates_names:
+                total_reg += norm_sq * lmbd1
+            else:
+                total_reg += norm_sq * lmbd2
         return total_reg
 
     # TODO: understand why ncon interferes with tf.function
     def true_loss_value(self, lmbd1: float = 1, lmbd2: float = 1):
         channels_dict = self.hidden_gates_dict
 
-        dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
-        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim)) #TODO: check dimdim amd bitstr correctness
+        all_bitstrings = self._all_bitstrings_cache
 
         total_logp = tf.constant(0, dtype=FLOAT)
         for name in self.tn_templates:  # we iterate by each circuit, the circuit is defined by its name
@@ -245,8 +249,7 @@ class BaseSolver:
             assert channels_dict is not None
             self.eval_estimated.gates = unwrap_dict(channels_dict)
 
-        dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
-        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim))
+        all_bitstrings = self._all_bitstrings_cache
 
         for name in names:
             sampled_probs = self.samples_compressed[name] / tf.reduce_sum(self.samples_compressed[name])
@@ -379,10 +382,10 @@ class QGOptSolver(BaseSolver):
 
     def add_circuit(self, tn_template: NconTemplate, name: str, timestamp: tp.Optional[float] = None) -> None:
         self.timestamps[name] = float(len(self.tn_templates)) if timestamp is None else timestamp
-        self.tn_templates[name] = tn_template
+        self.tn_templates[name] = copy.deepcopy(tn_template)
         self.eval_pure.add_circuit(self._simple_template(tn_template), name)
-        self.eval_hidden.add_circuit(tn_template, name)
-        self.eval_estimated.add_circuit(tn_template, name)
+        self.eval_hidden.add_circuit(copy.deepcopy(tn_template), name)
+        self.eval_estimated.add_circuit(copy.deepcopy(tn_template), name)
 
     # TODO: understand why ncon interferes with tf.function
     def _loss_and_grad(self, lmbd1: float, lmbd2: float, v: bool = False) -> [TENSOR, dict[TENSOR]]:
@@ -397,8 +400,7 @@ class QGOptSolver(BaseSolver):
             # and then they get passed into 'eval_estimated'
             self.eval_estimated.gates = unwrap_dict(channels_dict)
 
-            dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
-            all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim))
+            all_bitstrings = self._all_bitstrings_cache
 
             total_logp = tf.constant(0, dtype=FLOAT)
             for name in self.tn_templates:  # we iterate by each circuit, the circuit is defined by its name
@@ -450,8 +452,7 @@ class QGOptSolver(BaseSolver):
             channels_dict = self._get_estimated_channels()
             self.eval_estimated.gates = unwrap_dict(channels_dict)
 
-            dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
-            all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim))
+            all_bitstrings = self._all_bitstrings_cache
 
             total_logp = tf.constant(0, dtype=FLOAT)
             for name in self.tn_templates:
@@ -480,8 +481,7 @@ class QGOptSolver(BaseSolver):
         return loss, grad_dict
 
     def get_circ_l1_norms(self, name: str) -> tuple[tf.Tensor, tf.Tensor]:
-        dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
-        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim))
+        all_bitstrings = self._all_bitstrings_cache
 
         probs_pure = self.eval_pure.evaluate(all_bitstrings, name)
         probs_est = self.eval_estimated.evaluate(all_bitstrings, name)
@@ -740,24 +740,35 @@ class QGOptSolverDebug(QGOptSolver):
 
             if fid_ctr > 0 and iteration % fid_ctr == 0:
                 channels_dict = self._get_estimated_channels()
-                for gate_name in self.single_qud_gates_names:
-                    for gate_id in range(self.n):
+                learnable_single = self.learnable_gates_names & self.single_qud_gates_names
+                for gate_name in learnable_single:
+                    # Tied gate has single shared channel (repeat keeps 12 copies identical)
+                    copies = 1 if gate_name in self.tied_gates_names else self.n
+                    for gate_id in range(copies):
                         func = FUNCS[gate_name] if gate_name in FUNCS else util.diamond_norm_1q
-                        fid = func(channels_dict[gate_name][gate_id],
-                                   self.hidden_gates_dict[gate_name][gate_id], self.dim)
+                        # For tied, hidden may have n copies, estimated has 1 logical; compare to hidden[0]
+                        hidden_id = 0 if gate_name in self.tied_gates_names else gate_id
+                        # channels_dict for tied already repeated, but we use first copy for single logical
+                        est_id = 0 if gate_name in self.tied_gates_names else gate_id
+                        fid = func(channels_dict[gate_name][est_id],
+                                   self.hidden_gates_dict[gate_name][hidden_id], self.dim)
                         fids_dict[(gate_name, gate_id, 't')].append(fid)
 
-                        fid = func(channels_dict[gate_name][gate_id],
+                        fid = func(channels_dict[gate_name][est_id],
                                    self.pure_channels_set[gate_name], self.dim)
                         fids_dict[(gate_name, gate_id, 'i')].append(fid)
 
-                for gate_name in self.two_qud_gates_names:
-                    for gate_id in range(self.n * (self.n - 1)):
-                        fid = util.diamond_norm_2q(channels_dict[gate_name][gate_id],
-                                                   self.hidden_gates_dict[gate_name][gate_id], self.dim)
+                learnable_two = self.learnable_gates_names & self.two_qud_gates_names
+                for gate_name in learnable_two:
+                    copies = 1 if gate_name in self.tied_gates_names else self.n * (self.n - 1)
+                    for gate_id in range(copies):
+                        hidden_id = 0 if gate_name in self.tied_gates_names else gate_id
+                        est_id = 0 if gate_name in self.tied_gates_names else gate_id
+                        fid = util.diamond_norm_2q(channels_dict[gate_name][est_id],
+                                                   self.hidden_gates_dict[gate_name][hidden_id], self.dim)
                         fids_dict[(gate_name, gate_id, 't')].append(fid)
 
-                        fid = util.diamond_norm_2q(channels_dict[gate_name][gate_id],
+                        fid = util.diamond_norm_2q(channels_dict[gate_name][est_id],
                                                    self.pure_channels_set[gate_name], self.dim)
                         fids_dict[(gate_name, gate_id, 'i')].append(fid)
 
@@ -772,8 +783,7 @@ class QGOptSolverDebug(QGOptSolver):
 
     def _get_current_l1_norm(self):
         # self.eval_estimated.gates = get_complex_channel_form(self.estimated_gates_dict) - SHOULD BE TRUE
-        dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
-        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim))
+        all_bitstrings = self._all_bitstrings_cache
 
         l1_norm = tf.constant(0, dtype=FLOAT)
 
@@ -787,8 +797,7 @@ class QGOptSolverDebug(QGOptSolver):
     def _negloglik(self, channels_dict: GateSet) -> tf.Tensor:
         self.eval_estimated.gates = unwrap_dict(channels_dict)
 
-        dimdim = tf.constant([self.dim] * self.n, dtype=tf.int64)
-        all_bitstrings = tf.transpose(tf.unravel_index(np.arange(self.dim ** self.n), dimdim))
+        all_bitstrings = self._all_bitstrings_cache
 
         total_logp = tf.constant(0, dtype=FLOAT)
         for name in self.tn_templates:  # we iterate by each circuit, the circuit is defined by its name

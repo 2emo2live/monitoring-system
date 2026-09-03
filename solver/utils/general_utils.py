@@ -7,7 +7,6 @@ from solver.utils.misc import COMPLEX, FLOAT
 from qiskit.quantum_info import diamond_norm, Choi
 
 
-@tf.function
 def make_basis_state_matrix(i, j, dim: int = 2):
     """
     Makes a 'dimelements' x 'dim' matrix with a single unit element at '(i,j)'th position
@@ -15,7 +14,6 @@ def make_basis_state_matrix(i, j, dim: int = 2):
     matr = tf.one_hot(i * dim + j, dim * dim, dtype=COMPLEX)
     return tf.reshape(matr, (dim, dim))
 
-@tf.function
 def create_unitary_rotation_y(angle: float) -> tf.Tensor:
     """
     Creates a unitary operator describing rotations of quantum state via Y axis.
@@ -24,7 +22,6 @@ def create_unitary_rotation_y(angle: float) -> tf.Tensor:
                                  [+math.sin(angle / 2), math.cos(angle / 2)]], dtype=COMPLEX)
 
 
-@tf.function
 def generalized_rotation_y(angle: float, dim: int = 2, i: int = 0, j: int = 1) -> tf.Tensor:
     """
     Creates a unitary operator describing rotations of quantum state via Y axis for qudit
@@ -42,7 +39,6 @@ def generalized_rotation_y(angle: float, dim: int = 2, i: int = 0, j: int = 1) -
     pauli_y = angle/2 * (-ketbra_ji*1j + ketbra_ij*1j) * 1j
     return tf.convert_to_tensor(scipy.linalg.expm(pauli_y), dtype=COMPLEX)
 
-@tf.function
 def generalized_rotation_x(angle: float, dim: int = 2, i: int = 0, j: int = 1) -> tf.Tensor:
     """
     Creates a unitary operator describing rotations of quantum state via X axis for qudit
@@ -61,7 +57,6 @@ def generalized_rotation_x(angle: float, dim: int = 2, i: int = 0, j: int = 1) -
     return tf.convert_to_tensor(scipy.linalg.expm(pauli_y), dtype=COMPLEX)
 
 
-@tf.function
 def create_unitary_rotation_x(angle: float) -> tf.Tensor:
     """
     Creates a unitary operator describing rotations of quantum state via X axis.
@@ -70,7 +65,6 @@ def create_unitary_rotation_x(angle: float) -> tf.Tensor:
                                  [-1j * math.sin(angle / 2), math.cos(angle / 2) + 0j]], dtype=COMPLEX)
 
 
-@tf.function
 def create_unitary_rotation_z(angle: float) -> tf.Tensor:
     """
     Creates a unitary operator describing rotations of quantum state via Z axis.
@@ -79,13 +73,12 @@ def create_unitary_rotation_z(angle: float) -> tf.Tensor:
                                  [0, math.cos(angle / 2) + 1j * math.sin(angle / 2)]], dtype=COMPLEX)
 
 
-@tf.function
 def kron(a: tf.Tensor, b: tf.Tensor) -> tf.Tensor:
     """
     Returns Kronecker product of two square matrices. The resulting shape is (dim1 * dim2, dim1 * dim2).
     """
-    dim1 = a.shape[-1]
-    dim2 = b.shape[-1]
+    dim1 = tf.shape(a)[-1]
+    dim2 = tf.shape(b)[-1]
     ab = tf.transpose(tf.tensordot(a, b, axes=0), (0, 2, 1, 3))
     return tf.reshape(ab, (dim1 * dim2, dim1 * dim2))
 

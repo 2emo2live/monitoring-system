@@ -250,12 +250,13 @@ class DataGenerator:
                 elif gate_info[0] in self.two_qub_gates:
                     assert len(gate_info) == 3
                     shift = self.two_qub_gates[gate_info[0]]
-                    new_tensor_id = len(self.single_qub_gates) * self.n
-                    new_tensor_id += shift * self.n * (self.n - 1)
-                    new_tensor_id += (self.n - 1) * int(gate_info[1])
-                    new_tensor_id += int(gate_info[2])
-                    if int(gate_info[2]) < int(gate_info[1]):
-                        new_tensor_id += 1
+                    q1, q2 = int(gate_info[1]), int(gate_info[2])
+                    assert q1 != q2 and 0 <= q1 < self.n and 0 <= q2 < self.n
+                    # Single gates occupy 0 .. n*nsingle-1, _E at n*nsingle, 2q start at +1
+                    base = len(self.single_qub_gates) * self.n + 1 + shift * self.n * (self.n - 1)
+                    offset = q1 * (self.n - 1) + q2 - (1 if q2 > q1 else 0)
+                    assert 0 <= offset < self.n * (self.n - 1)
+                    new_tensor_id = base + offset
 
                 else:
                     raise ValueError("Wrong format of gate name", gate_info[0])
